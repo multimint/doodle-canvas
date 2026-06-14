@@ -10,6 +10,7 @@ interface Props {
 }
 
 const TOOLS: { id: ToolType; icon: string; label: string }[] = [
+  { id: 'hand',   icon: '✋', label: 'Grab (Space)' },
   { id: 'pen',    icon: '✏️', label: 'Pen' },
   { id: 'eraser', icon: '🧹', label: 'Eraser' },
   { id: 'line',   icon: '╱',  label: 'Line' },

@@ -9,6 +9,7 @@ import { useCursors } from './hooks/useCursors'
 import { usePresence } from './hooks/usePresence'
 import { useUndoStack } from './hooks/useUndoStack'
 import { useLiveStrokes } from './hooks/useLiveStrokes'
+import type { LiveStroke } from './hooks/useLiveStrokes'
 import { DrawingStage } from './components/DrawingStage'
 import { Toolbar } from './components/Toolbar'
 import { CursorOverlay } from './components/CursorOverlay'
@@ -27,13 +28,19 @@ export function CanvasPage() {
   const [canvasDoc, setCanvasDoc] = useState<CanvasDoc | null>(null)
   const [loadingDoc, setLoadingDoc] = useState(true)
   const [showInvite, setShowInvite] = useState(false)
-  const [cursorScale, setCursorScale] = useState(1)
+  const [viewport, setViewport] = useState({ zoom: 1, pan: { x: 0, y: 0 } })
 
   const stageRef = useRef<Konva.Stage>(null)
+  const prevToolRef = useRef<ToolType>('pen')
+  const toolRef = useRef<ToolType>('pen')
+  const spaceActivatedHandRef = useRef(false)
 
   const [tool, setTool] = useState<ToolType>('pen')
   const [color, setColor] = useState('#000000')
   const [strokeWidth, setStrokeWidth] = useState(4)
+
+  // Keep toolRef current for use in key handlers
+  useEffect(() => { toolRef.current = tool }, [tool])
 
   useEffect(() => {
     if (!canvasId) return
@@ -80,15 +87,50 @@ export function CanvasPage() {
     await clearAllStrokes()
   }, [clearAllStrokes])
 
+  const handleViewportChange = useCallback((zoom: number, pan: { x: number; y: number }) => {
+    setViewport({ zoom, pan })
+  }, [])
+
+  const handleLiveUpdate = useCallback((data: LiveStroke | null) => {
+    if (data) emitLiveStroke(data); else clearLiveStroke()
+  }, [emitLiveStroke, clearLiveStroke])
+
   useEffect(() => {
+    const isTyping = (e: KeyboardEvent) =>
+      e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement
+
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
         e.preventDefault()
         handleUndo()
+        return
+      }
+      if (e.code === 'Space' && !isTyping(e)) {
+        e.preventDefault()
+        if (toolRef.current !== 'hand') {
+          prevToolRef.current = toolRef.current
+          spaceActivatedHandRef.current = true
+          setTool('hand')
+        }
+      }
+    }
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && !isTyping(e)) {
+        if (spaceActivatedHandRef.current) {
+          spaceActivatedHandRef.current = false
+          // Only restore if the user hasn't manually switched tool while Space was held
+          if (toolRef.current === 'hand') {
+            setTool(prevToolRef.current)
+          }
+        }
       }
     }
     window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keyup', onKeyUp)
+    }
   }, [handleUndo])
 
   const displayNames: Record<string, string> = {}
@@ -170,7 +212,7 @@ export function CanvasPage() {
           onStrokeWidthChange={setStrokeWidth}
         />
 
-        <div className="flex-1 overflow-hidden paper-dots flex items-center justify-center">
+        <div className="flex-1 overflow-hidden paper-dots">
           <DrawingStage
             strokes={strokes}
             tool={tool}
@@ -181,11 +223,11 @@ export function CanvasPage() {
             onMouseMove={emitCursor}
             onMouseLeave={clearCursor}
             onDeleteStroke={handleDeleteStroke}
-            onScaleChange={setCursorScale}
+            onViewportChange={handleViewportChange}
             stageRef={stageRef}
-            overlay={<CursorOverlay cursors={cursors} scale={cursorScale} displayNames={displayNames} />}
+            overlay={<CursorOverlay cursors={cursors} zoom={viewport.zoom} pan={viewport.pan} displayNames={displayNames} />}
             remoteStrokes={remoteStrokes}
-            onLiveUpdate={(data) => { if (data) emitLiveStroke(data); else clearLiveStroke() }}
+            onLiveUpdate={handleLiveUpdate}
           />
         </div>
       </div>

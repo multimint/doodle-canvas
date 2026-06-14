@@ -94,7 +94,7 @@ export function konvaShapeToStroke(
 ): Omit<Stroke, 'id'> {
   const attrs = shape.attrs as StrokeData
   return {
-    type: tool === 'pen' ? 'path' : tool,
+    type: (tool === 'pen' ? 'path' : tool) as Stroke['type'],
     authorId,
     data: attrs,
     timestamp: Date.now(),
