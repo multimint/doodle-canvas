@@ -46,6 +46,24 @@
   overflow: hidden;
 }
 
+.remote-cursor {
+  position: absolute;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.cursor-label {
+  font-family: 'Patrick Hand', cursive;
+  font-size: 11px;
+  color: white;
+  padding: 1px 5px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
 /* Text tool floats over the Konva stage */
 .text-tool-input {
   position: absolute;

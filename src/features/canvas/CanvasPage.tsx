@@ -168,7 +168,7 @@ export function CanvasPage() {
           onStrokeWidthChange={setStrokeWidth}
         />
 
-        <div className="flex-1 overflow-hidden relative paper-dots flex items-center justify-center">
+        <div className="flex-1 overflow-hidden paper-dots flex items-center justify-center">
           <DrawingStage
             strokes={strokes}
             tool={tool}
@@ -181,8 +181,8 @@ export function CanvasPage() {
             onDeleteStroke={handleDeleteStroke}
             onScaleChange={setCursorScale}
             stageRef={stageRef}
+            overlay={<CursorOverlay cursors={cursors} scale={cursorScale} displayNames={displayNames} />}
           />
-          <CursorOverlay cursors={cursors} scale={cursorScale} displayNames={displayNames} />
         </div>
       </div>
 

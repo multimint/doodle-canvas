@@ -3,6 +3,7 @@ import { doc, increment, writeBatch } from 'firebase/firestore'
 import { ref as rtdbRef, remove } from 'firebase/database'
 import { db, rtdb } from '../../lib/firebase'
 import type { CanvasDoc } from '../../lib/types'
+import { CanvasPreview } from './CanvasPreview'
 
 interface Props {
   canvas: CanvasDoc
@@ -44,7 +45,7 @@ export function CanvasCard({ canvas, isOwner, uid, rotate = 'none' }: Props) {
       <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 w-4 h-4 rounded-full bg-accent border-2 border-ink shadow-hard-sm" />
 
       {/* Preview */}
-      <div className="w-full aspect-video paper-dots border-b-2 border-ink" />
+      <CanvasPreview canvasId={canvas.id} />
 
       {/* Info */}
       <div className="px-3 py-2 flex items-center gap-2">

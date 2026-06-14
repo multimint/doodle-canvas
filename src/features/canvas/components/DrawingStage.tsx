@@ -17,6 +17,7 @@ interface Props {
   onDeleteStroke: (id: string) => void
   onScaleChange: (scale: number) => void
   stageRef: React.RefObject<Konva.Stage>
+  overlay?: React.ReactNode
 }
 
 const CANVAS_WIDTH = 1920
@@ -24,7 +25,7 @@ const CANVAS_HEIGHT = 1080
 
 export function DrawingStage({
   strokes, tool, color, strokeWidth, disabled,
-  onStrokeComplete, onMouseMove, onMouseLeave, onDeleteStroke, onScaleChange, stageRef,
+  onStrokeComplete, onMouseMove, onMouseLeave, onDeleteStroke, onScaleChange, stageRef, overlay,
 }: Props) {
   const isDrawing = useRef(false)
   const [livePoints, setLivePoints] = useState<number[]>([])
@@ -286,33 +287,41 @@ export function DrawingStage({
 
   const cursor = disabled ? 'not-allowed' : tool === 'eraser' ? 'cell' : tool === 'text' ? 'text' : 'crosshair'
 
+  const stageW = CANVAS_WIDTH * scale
+  const stageH = CANVAS_HEIGHT * scale
+
   return (
     <div className="stage-container" ref={containerRef}>
-      <Stage
-        ref={stageRef}
-        width={CANVAS_WIDTH * scale}
-        height={CANVAS_HEIGHT * scale}
-        scaleX={scale}
-        scaleY={scale}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={() => { handleMouseUp(); onMouseLeave() }}
-        style={{ cursor }}
-      >
-        <Layer>
-          {strokes.map(renderStroke)}
-          {!disabled && renderLiveStroke()}
-        </Layer>
-      </Stage>
+      {/* Sized wrapper so the cursor overlay shares the exact same origin as the Stage */}
+      <div style={{ position: 'relative', width: stageW, height: stageH }}>
+        <Stage
+          ref={stageRef}
+          width={stageW}
+          height={stageH}
+          scaleX={scale}
+          scaleY={scale}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={() => { handleMouseUp(); onMouseLeave() }}
+          style={{ cursor }}
+        >
+          <Layer>
+            {strokes.map(renderStroke)}
+            {!disabled && renderLiveStroke()}
+          </Layer>
+        </Stage>
 
-      {textPrompt && !disabled && (
-        <TextInput
-          x={textPrompt.x * scale}
-          y={textPrompt.y * scale}
-          onSubmit={handleTextSubmit}
-        />
-      )}
+        {textPrompt && !disabled && (
+          <TextInput
+            x={textPrompt.x * scale}
+            y={textPrompt.y * scale}
+            onSubmit={handleTextSubmit}
+          />
+        )}
+
+        {overlay}
+      </div>
     </div>
   )
 }
