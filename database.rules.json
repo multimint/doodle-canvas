@@ -33,6 +33,13 @@
           }
         },
 
+        "live": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid && root.child('canvases/' + $canvasId + '/access/members/' + auth.uid).val() === true",
+            ".validate": "newData.hasChildren(['type', 'points', 'color', 'strokeWidth']) || !newData.exists()"
+          }
+        },
+
         "cursors": {
           "$uid": {
             ".read": "auth != null && root.child('canvases/' + $canvasId + '/access/members/' + auth.uid).val() === true",

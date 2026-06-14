@@ -4,6 +4,7 @@ import type Konva from 'konva'
 import type { KonvaEventObject } from 'konva/lib/Node'
 import type { Stroke, ToolType } from '../../../lib/types'
 import { buildStrokeData } from '../utils/strokeSerializer'
+import type { LiveStroke } from '../hooks/useLiveStrokes'
 
 interface Props {
   strokes: Stroke[]
@@ -18,6 +19,8 @@ interface Props {
   onScaleChange: (scale: number) => void
   stageRef: React.RefObject<Konva.Stage>
   overlay?: React.ReactNode
+  remoteStrokes?: Record<string, LiveStroke>
+  onLiveUpdate?: (stroke: LiveStroke | null) => void
 }
 
 const CANVAS_WIDTH = 1920
@@ -25,11 +28,13 @@ const CANVAS_HEIGHT = 1080
 
 export function DrawingStage({
   strokes, tool, color, strokeWidth, disabled,
-  onStrokeComplete, onMouseMove, onMouseLeave, onDeleteStroke, onScaleChange, stageRef, overlay,
+  onStrokeComplete, onMouseMove, onMouseLeave, onDeleteStroke, onScaleChange,
+  stageRef, overlay, remoteStrokes, onLiveUpdate,
 }: Props) {
   const isDrawing = useRef(false)
+  const livePointsRef = useRef<number[]>([])
+  const liveStartRef = useRef<{ x: number; y: number } | null>(null)
   const [livePoints, setLivePoints] = useState<number[]>([])
-  const [liveStart, setLiveStart] = useState<{ x: number; y: number } | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [scale, setScale] = useState(1)
   const [textPrompt, setTextPrompt] = useState<{ x: number; y: number } | null>(null)
@@ -46,7 +51,6 @@ export function DrawingStage({
     const ro = new ResizeObserver(updateScale)
     if (containerRef.current) ro.observe(containerRef.current)
     return () => ro.disconnect()
-  // onScaleChange is stable (setScale from parent)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -69,8 +73,10 @@ export function DrawingStage({
 
     isDrawing.current = true
     const { x, y } = getPos(e)
-    setLivePoints([x, y, x, y])
-    setLiveStart({ x, y })
+    const pts = [x, y, x, y]
+    livePointsRef.current = pts
+    liveStartRef.current = { x, y }
+    setLivePoints(pts)
   }
 
   const handleMouseMove = (e: KonvaEventObject<MouseEvent>) => {
@@ -79,24 +85,36 @@ export function DrawingStage({
 
     if (!isDrawing.current) return
 
+    let newPoints: number[]
     if (tool === 'pen' || tool === 'eraser') {
-      setLivePoints((prev) => [...prev, x, y])
-    } else if (liveStart) {
-      setLivePoints([liveStart.x, liveStart.y, x, y])
+      newPoints = [...livePointsRef.current, x, y]
+    } else if (liveStartRef.current) {
+      newPoints = [liveStartRef.current.x, liveStartRef.current.y, x, y]
+    } else {
+      return
     }
+
+    livePointsRef.current = newPoints
+    setLivePoints(newPoints)
+
+    const strokeType = (tool === 'pen' ? 'path' : tool) as Stroke['type']
+    onLiveUpdate?.({ type: strokeType, points: newPoints, color, strokeWidth })
   }
 
   const handleMouseUp = useCallback(() => {
-    if (!isDrawing.current || livePoints.length < 4) {
+    const points = livePointsRef.current
+    if (!isDrawing.current || points.length < 4) {
       isDrawing.current = false
+      livePointsRef.current = []
+      liveStartRef.current = null
       setLivePoints([])
-      setLiveStart(null)
+      onLiveUpdate?.(null)
       return
     }
     isDrawing.current = false
 
     const rtool = tool === 'pen' ? 'path' : tool
-    const data = buildStrokeData(tool, livePoints, color, strokeWidth)
+    const data = buildStrokeData(tool, points, color, strokeWidth)
     onStrokeComplete({
       type: rtool as Stroke['type'],
       authorId: '',
@@ -104,9 +122,11 @@ export function DrawingStage({
       timestamp: Date.now(),
     })
 
+    livePointsRef.current = []
+    liveStartRef.current = null
     setLivePoints([])
-    setLiveStart(null)
-  }, [tool, livePoints, color, strokeWidth, onStrokeComplete])
+    onLiveUpdate?.(null)
+  }, [tool, color, strokeWidth, onStrokeComplete, onLiveUpdate])
 
   const handleTextSubmit = useCallback((text: string) => {
     if (!textPrompt || !text.trim()) {
@@ -134,78 +154,37 @@ export function DrawingStage({
 
     switch (stroke.type) {
       case 'path':
-        return (
-          <Line
-            {...commonProps}
-            points={data.points ?? []}
-            stroke={data.stroke}
-            strokeWidth={data.strokeWidth}
-            lineCap="round"
-            lineJoin="round"
-            tension={0.5}
-          />
-        )
+        return <Line {...commonProps} points={data.points ?? []} stroke={data.stroke} strokeWidth={data.strokeWidth} lineCap="round" lineJoin="round" tension={0.5} />
       case 'eraser':
-        return (
-          <Line
-            {...commonProps}
-            points={data.points ?? []}
-            stroke="rgba(0,0,0,1)"
-            strokeWidth={data.strokeWidth}
-            lineCap="round"
-            lineJoin="round"
-            tension={0.5}
-            globalCompositeOperation="destination-out"
-          />
-        )
+        return <Line {...commonProps} points={data.points ?? []} stroke="rgba(0,0,0,1)" strokeWidth={data.strokeWidth} lineCap="round" lineJoin="round" tension={0.5} globalCompositeOperation="destination-out" />
       case 'rect':
-        return (
-          <Rect
-            {...commonProps}
-            x={data.x}
-            y={data.y}
-            width={data.width}
-            height={data.height}
-            stroke={data.stroke}
-            strokeWidth={data.strokeWidth}
-            fill="transparent"
-          />
-        )
+        return <Rect {...commonProps} x={data.x} y={data.y} width={data.width} height={data.height} stroke={data.stroke} strokeWidth={data.strokeWidth} fill="transparent" />
       case 'circle':
-        return (
-          <Ellipse
-            {...commonProps}
-            x={data.x}
-            y={data.y}
-            radiusX={data.radiusX ?? 0}
-            radiusY={data.radiusY ?? 0}
-            stroke={data.stroke}
-            strokeWidth={data.strokeWidth}
-            fill="transparent"
-          />
-        )
+        return <Ellipse {...commonProps} x={data.x} y={data.y} radiusX={data.radiusX ?? 0} radiusY={data.radiusY ?? 0} stroke={data.stroke} strokeWidth={data.strokeWidth} fill="transparent" />
       case 'line':
-        return (
-          <Line
-            {...commonProps}
-            points={data.points ?? []}
-            stroke={data.stroke}
-            strokeWidth={data.strokeWidth}
-            lineCap="round"
-          />
-        )
+        return <Line {...commonProps} points={data.points ?? []} stroke={data.stroke} strokeWidth={data.strokeWidth} lineCap="round" />
       case 'text':
-        return (
-          <Text
-            {...commonProps}
-            x={data.x}
-            y={data.y}
-            text={data.text}
-            fontSize={data.fontSize}
-            fill={data.stroke}
-            fontFamily="sans-serif"
-          />
-        )
+        return <Text {...commonProps} x={data.x} y={data.y} text={data.text} fontSize={data.fontSize} fill={data.stroke} fontFamily="sans-serif" />
+      default:
+        return null
+    }
+  }
+
+  const renderRemoteLiveStroke = (remoteUid: string, s: LiveStroke) => {
+    const key = `live-${remoteUid}`
+    if (s.points.length < 4) return null
+    const [x1, y1, x2, y2] = s.points
+    switch (s.type) {
+      case 'path':
+        return <Line key={key} points={s.points} stroke={s.color} strokeWidth={s.strokeWidth} lineCap="round" lineJoin="round" tension={0.5} listening={false} />
+      case 'eraser':
+        return <Line key={key} points={s.points} stroke="rgba(0,0,0,1)" strokeWidth={s.strokeWidth} lineCap="round" lineJoin="round" tension={0.5} globalCompositeOperation="destination-out" listening={false} />
+      case 'rect':
+        return <Rect key={key} x={Math.min(x1, x2)} y={Math.min(y1, y2)} width={Math.abs(x2 - x1)} height={Math.abs(y2 - y1)} stroke={s.color} strokeWidth={s.strokeWidth} fill="transparent" listening={false} />
+      case 'circle':
+        return <Ellipse key={key} x={(x1 + x2) / 2} y={(y1 + y2) / 2} radiusX={Math.abs(x2 - x1) / 2} radiusY={Math.abs(y2 - y1) / 2} stroke={s.color} strokeWidth={s.strokeWidth} fill="transparent" listening={false} />
+      case 'line':
+        return <Line key={key} points={[x1, y1, x2, y2]} stroke={s.color} strokeWidth={s.strokeWidth} lineCap="round" listening={false} />
       default:
         return null
     }
@@ -213,86 +192,30 @@ export function DrawingStage({
 
   const renderLiveStroke = () => {
     if (livePoints.length < 4) return null
+    const [x1, y1, x2, y2] = livePoints
 
     switch (tool) {
       case 'pen':
-        return (
-          <Line
-            points={livePoints}
-            stroke={color}
-            strokeWidth={strokeWidth}
-            lineCap="round"
-            lineJoin="round"
-            tension={0.5}
-            listening={false}
-          />
-        )
+        return <Line points={livePoints} stroke={color} strokeWidth={strokeWidth} lineCap="round" lineJoin="round" tension={0.5} listening={false} />
       case 'eraser':
-        return (
-          <Line
-            points={livePoints}
-            stroke="rgba(0,0,0,1)"
-            strokeWidth={strokeWidth}
-            lineCap="round"
-            lineJoin="round"
-            tension={0.5}
-            globalCompositeOperation="destination-out"
-            listening={false}
-          />
-        )
-      case 'rect': {
-        const [x1, y1, x2, y2] = livePoints
-        return (
-          <Rect
-            x={Math.min(x1, x2)}
-            y={Math.min(y1, y2)}
-            width={Math.abs(x2 - x1)}
-            height={Math.abs(y2 - y1)}
-            stroke={color}
-            strokeWidth={strokeWidth}
-            fill="transparent"
-            listening={false}
-          />
-        )
-      }
-      case 'circle': {
-        const [x1, y1, x2, y2] = livePoints
-        return (
-          <Ellipse
-            x={(x1 + x2) / 2}
-            y={(y1 + y2) / 2}
-            radiusX={Math.abs(x2 - x1) / 2}
-            radiusY={Math.abs(y2 - y1) / 2}
-            stroke={color}
-            strokeWidth={strokeWidth}
-            fill="transparent"
-            listening={false}
-          />
-        )
-      }
+        return <Line points={livePoints} stroke="rgba(0,0,0,1)" strokeWidth={strokeWidth} lineCap="round" lineJoin="round" tension={0.5} globalCompositeOperation="destination-out" listening={false} />
+      case 'rect':
+        return <Rect x={Math.min(x1, x2)} y={Math.min(y1, y2)} width={Math.abs(x2 - x1)} height={Math.abs(y2 - y1)} stroke={color} strokeWidth={strokeWidth} fill="transparent" listening={false} />
+      case 'circle':
+        return <Ellipse x={(x1 + x2) / 2} y={(y1 + y2) / 2} radiusX={Math.abs(x2 - x1) / 2} radiusY={Math.abs(y2 - y1) / 2} stroke={color} strokeWidth={strokeWidth} fill="transparent" listening={false} />
       case 'line':
-        return (
-          <Line
-            points={livePoints}
-            stroke={color}
-            strokeWidth={strokeWidth}
-            lineCap="round"
-            listening={false}
-          />
-        )
+        return <Line points={livePoints} stroke={color} strokeWidth={strokeWidth} lineCap="round" listening={false} />
       default:
         return null
     }
   }
 
   const cursor = disabled ? 'not-allowed' : tool === 'eraser' ? 'cell' : tool === 'text' ? 'text' : 'crosshair'
-
   const stageW = CANVAS_WIDTH * scale
   const stageH = CANVAS_HEIGHT * scale
 
   return (
     <div className="stage-container" ref={containerRef}>
-      {/* Sized wrapper so the cursor overlay shares the exact same origin as the Stage */}
       <div style={{ position: 'relative', width: stageW, height: stageH }}>
         <Stage
           ref={stageRef}
@@ -308,6 +231,7 @@ export function DrawingStage({
         >
           <Layer>
             {strokes.map(renderStroke)}
+            {remoteStrokes && Object.entries(remoteStrokes).map(([uid, s]) => renderRemoteLiveStroke(uid, s))}
             {!disabled && renderLiveStroke()}
           </Layer>
         </Stage>

@@ -8,6 +8,7 @@ import { useStrokes } from './hooks/useStrokes'
 import { useCursors } from './hooks/useCursors'
 import { usePresence } from './hooks/usePresence'
 import { useUndoStack } from './hooks/useUndoStack'
+import { useLiveStrokes } from './hooks/useLiveStrokes'
 import { DrawingStage } from './components/DrawingStage'
 import { Toolbar } from './components/Toolbar'
 import { CursorOverlay } from './components/CursorOverlay'
@@ -48,6 +49,7 @@ export function CanvasPage() {
 
   const { strokes, atCap, addStroke, deleteStroke, clearAllStrokes } = useStrokes(canvasId!)
   const { cursors, emitCursor, clearCursor } = useCursors(canvasId!, uid, userColor)
+  const { remoteStrokes, emitLiveStroke, clearLiveStroke } = useLiveStrokes(canvasId!, uid)
   const presence = usePresence({
     canvasId: canvasId!,
     uid,
@@ -182,6 +184,8 @@ export function CanvasPage() {
             onScaleChange={setCursorScale}
             stageRef={stageRef}
             overlay={<CursorOverlay cursors={cursors} scale={cursorScale} displayNames={displayNames} />}
+            remoteStrokes={remoteStrokes}
+            onLiveUpdate={(data) => { if (data) emitLiveStroke(data); else clearLiveStroke() }}
           />
         </div>
       </div>
