@@ -1,6 +1,7 @@
 name: Deploy Firebase Rules
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -8,6 +9,7 @@ on:
       - firestore.rules
       - firestore.indexes.json
       - database.rules.json
+      - .github/workflows/deploy-firebase-rules.yml
 
 jobs:
   deploy:
