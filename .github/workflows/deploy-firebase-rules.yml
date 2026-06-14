@@ -1,0 +1,25 @@
+name: Deploy Firebase Rules
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - firestore.rules
+      - firestore.indexes.json
+      - database.rules.json
+
+jobs:
+  deploy:
+    name: Deploy rules to Firebase
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy Firestore & RTDB rules
+        uses: w9jds/firebase-action@master
+        with:
+          args: deploy --only firestore:rules,firestore:indexes,database
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+          DEFAULT_PROJECT: doodle-canvas-b3ddb

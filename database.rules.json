@@ -1,0 +1,54 @@
+{
+  "rules": {
+    "canvases": {
+      "$canvasId": {
+        ".read": "auth != null && root.child('canvases/' + $canvasId + '/access/members/' + auth.uid).val() === true",
+
+        "access": {
+          "ownerId": {
+            ".write": "auth != null && !data.exists()",
+            ".validate": "newData.val() === auth.uid"
+          },
+          "members": {
+            "$uid": {
+              ".write": "auth != null && (root.child('canvases/' + $canvasId + '/access/ownerId').val() === auth.uid || auth.uid === $uid)",
+              ".validate": "newData.val() === true || !newData.exists()"
+            }
+          }
+        },
+
+        "strokes": {
+          ".write": "auth != null && root.child('canvases/' + $canvasId + '/access/members/' + auth.uid).val() === true",
+          "$strokeId": {
+            ".validate": "newData.hasChildren(['type', 'authorId', 'data', 'timestamp'])",
+            "type": {
+              ".validate": "newData.val() === 'path' || newData.val() === 'rect' || newData.val() === 'circle' || newData.val() === 'line' || newData.val() === 'text' || newData.val() === 'eraser'"
+            },
+            "authorId": {
+              ".validate": "newData.val() === auth.uid"
+            },
+            "timestamp": {
+              ".validate": "newData.isNumber()"
+            }
+          }
+        },
+
+        "cursors": {
+          "$uid": {
+            ".read": "auth != null && root.child('canvases/' + $canvasId + '/access/members/' + auth.uid).val() === true",
+            ".write": "auth != null && auth.uid === $uid && root.child('canvases/' + $canvasId + '/access/members/' + auth.uid).val() === true",
+            ".validate": "newData.hasChildren(['x', 'y', 'color']) || !newData.exists()"
+          }
+        },
+
+        "presence": {
+          "$uid": {
+            ".read": "auth != null && root.child('canvases/' + $canvasId + '/access/members/' + auth.uid).val() === true",
+            ".write": "auth != null && auth.uid === $uid && root.child('canvases/' + $canvasId + '/access/members/' + auth.uid).val() === true",
+            ".validate": "newData.hasChildren(['displayName', 'color']) || !newData.exists()"
+          }
+        }
+      }
+    }
+  }
+}
