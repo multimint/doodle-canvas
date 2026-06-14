@@ -4,8 +4,7 @@ import { rtdb } from '../../../lib/firebase'
 import type { Stroke } from '../../../lib/types'
 
 const THROTTLE_MS = 50
-// Cap for real-time preview — full stroke is committed to strokes/ on mouseup
-const LIVE_POINTS_CAP = 200
+const LIVE_POINTS_CAP = 4000
 
 export interface LiveStroke {
   type: Stroke['type']
@@ -46,11 +45,9 @@ export function useLiveStrokes(canvasId: string, uid: string) {
     if (now - lastEmitRef.current < THROTTLE_MS) return
     lastEmitRef.current = now
 
-    // For growing paths, only send the tail so the payload stays bounded
     const points = stroke.points.length > LIVE_POINTS_CAP * 2
       ? stroke.points.slice(-LIVE_POINTS_CAP * 2)
       : stroke.points
-
     set(myLiveRef, { ...stroke, points })
   }, [myLiveRef])
 
