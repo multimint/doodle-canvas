@@ -9,13 +9,13 @@ interface Props {
   onStrokeWidthChange: (w: number) => void
 }
 
-const TOOLS: { id: ToolType; label: string; icon: string }[] = [
-  { id: 'pen',     label: 'Pen',       icon: '✏️' },
-  { id: 'eraser',  label: 'Eraser',    icon: '🧹' },
-  { id: 'line',    label: 'Line',      icon: '╱' },
-  { id: 'rect',    label: 'Rectangle', icon: '▭' },
-  { id: 'circle',  label: 'Circle',    icon: '○' },
-  { id: 'text',    label: 'Text',      icon: 'T' },
+const TOOLS: { id: ToolType; icon: string; label: string }[] = [
+  { id: 'pen',    icon: '✏️', label: 'Pen' },
+  { id: 'eraser', icon: '🧹', label: 'Eraser' },
+  { id: 'line',   icon: '╱',  label: 'Line' },
+  { id: 'rect',   icon: '▭',  label: 'Rectangle' },
+  { id: 'circle', icon: '○',  label: 'Circle' },
+  { id: 'text',   icon: 'T',  label: 'Text' },
 ]
 
 const PRESET_COLORS = [
@@ -26,45 +26,59 @@ const PRESET_COLORS = [
 
 export function Toolbar({ tool, color, strokeWidth, onToolChange, onColorChange, onStrokeWidthChange }: Props) {
   return (
-    <div className="toolbar">
-      <div className="toolbar-section">
+    <div
+      className="flex flex-col items-center gap-3 px-2 py-4 bg-white border-r-[3px] border-ink w-14 min-w-14 overflow-y-auto shrink-0"
+      style={{ borderRight: '3px solid #2d2d2d' }}
+    >
+      {/* Tools */}
+      <div className="flex flex-col items-center gap-1">
         {TOOLS.map((t) => (
           <button
             key={t.id}
-            className={`tool-btn ${tool === t.id ? 'active' : ''}`}
-            onClick={() => onToolChange(t.id)}
             title={t.label}
+            onClick={() => onToolChange(t.id)}
+            className={`w-9 h-9 flex items-center justify-center text-base border-2 border-ink transition-all duration-100 font-body
+              ${tool === t.id
+                ? 'bg-ink text-paper shadow-hard-sm translate-x-[1px] translate-y-[1px]'
+                : 'bg-white text-ink hover:bg-muted'
+              }`}
+            style={{ borderRadius: '8px 20px 8px 20px / 20px 8px 20px 8px' }}
           >
             {t.icon}
           </button>
         ))}
       </div>
 
-      <div className="toolbar-divider" />
+      {/* Divider */}
+      <div className="w-8 h-[2px] bg-ink/20 border-0 border-dashed" style={{ borderTop: '2px dashed #2d2d2d44' }} />
 
-      <div className="toolbar-section">
+      {/* Color swatches */}
+      <div className="flex flex-col items-center gap-1">
         {PRESET_COLORS.map((c) => (
           <button
             key={c}
-            className={`color-swatch ${color === c ? 'active' : ''}`}
-            style={{ background: c }}
-            onClick={() => onColorChange(c)}
             title={c}
+            onClick={() => onColorChange(c)}
+            className={`w-6 h-6 border-2 border-ink transition-all duration-100 rounded-full
+              ${color === c ? 'scale-125 shadow-hard-sm' : 'hover:scale-110'}`}
+            style={{ background: c }}
           />
         ))}
         <input
           type="color"
           value={color}
           onChange={(e) => onColorChange(e.target.value)}
-          className="color-picker"
+          className="color-picker mt-1"
           title="Custom color"
         />
       </div>
 
-      <div className="toolbar-divider" />
+      {/* Divider */}
+      <div className="w-8" style={{ borderTop: '2px dashed #2d2d2d44' }} />
 
-      <div className="toolbar-section toolbar-section--vertical">
-        <label className="stroke-label">Size: {strokeWidth}px</label>
+      {/* Stroke width */}
+      <div className="flex flex-col items-center gap-1">
+        <span className="font-body text-[9px] text-ink/50 text-center">{strokeWidth}px</span>
         <input
           type="range"
           min={1}

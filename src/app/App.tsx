@@ -9,7 +9,7 @@ export function App() {
   const { user, loading } = useAuth()
 
   if (loading) {
-    return <div className="loading-screen"><div className="spinner" /></div>
+    return <div className="flex items-center justify-center h-dvh paper-dots"><div className="spinner" /></div>
   }
 
   return (

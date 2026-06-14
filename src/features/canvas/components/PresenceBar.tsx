@@ -10,24 +10,29 @@ export function PresenceBar({ presence, currentUid }: Props) {
   if (entries.length === 0) return null
 
   return (
-    <div className="presence-bar">
+    <div className="flex items-center">
       {entries.map(([uid, entry]) => (
-        <div key={uid} className="presence-avatar" title={entry.displayName}>
+        <div key={uid} className="relative -ml-1 first:ml-0">
           {entry.photoURL ? (
             <img
               src={entry.photoURL}
               alt={entry.displayName}
-              style={{ border: `2px solid ${entry.color}` }}
+              className="w-7 h-7 rounded-full border-2"
+              style={{ borderColor: entry.color }}
+              title={entry.displayName}
             />
           ) : (
             <div
-              className="presence-avatar-initials"
+              className="w-7 h-7 rounded-full border-2 border-ink flex items-center justify-center font-body text-xs text-white font-bold"
               style={{ background: entry.color }}
+              title={entry.displayName}
             >
               {entry.displayName.charAt(0).toUpperCase()}
             </div>
           )}
-          {uid === currentUid && <span className="presence-you">you</span>}
+          {uid === currentUid && (
+            <span className="presence-you font-body">you</span>
+          )}
         </div>
       ))}
     </div>
