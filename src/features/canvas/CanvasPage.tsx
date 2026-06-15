@@ -11,8 +11,6 @@ import { usePresence } from './hooks/usePresence'
 import { useUndoStack } from './hooks/useUndoStack'
 import { useLiveStrokes } from './hooks/useLiveStrokes'
 import type { LiveStroke } from './hooks/useLiveStrokes'
-import { useSnapshot } from './hooks/useSnapshot'
-import { useRestore } from './hooks/useRestore'
 import { DrawingStage } from './components/DrawingStage'
 import { Toolbar } from './components/Toolbar'
 import { CursorOverlay } from './components/CursorOverlay'
@@ -71,26 +69,16 @@ export function CanvasPage() {
     get(ownerRef).then(snap => { if (!snap.exists()) return set(ownerRef, uid) }).catch(console.error)
   }, [canvasId, canvasDoc?.ownerId, uid])
 
-  const { strokes, strokesLoaded, atCap, addStroke, deleteStroke, clearAllStrokes } = useStrokes(canvasId!)
+  const { strokes, atCap, addStroke, deleteStroke, clearAllStrokes } = useStrokes(canvasId!)
   const { cursors, emitCursor, clearCursor } = useCursors(canvasId!, uid, userColor)
   const { remoteStrokes, emitLiveStroke, clearLiveStroke } = useLiveStrokes(canvasId!, uid)
-  const { presence, isLeader } = usePresence({
+  const { presence } = usePresence({
     canvasId: canvasId!,
     uid,
     displayName: user!.displayName ?? 'Anonymous',
     photoURL: user!.photoURL ?? '',
     color: userColor,
   })
-  useSnapshot({ canvasId: canvasId!, isLeader, strokes })
-  useRestore({
-    canvasId: canvasId!,
-    isLeader,
-    strokesLoaded,
-    strokeCount: strokes.length,
-    snapshotStrokeIds: canvasDoc?.snapshotStrokeIds,
-    snapshotAt: canvasDoc?.snapshotAt,
-  })
-
   const { push: pushUndo, pop: popUndo } = useUndoStack()
 
   const handleStrokeComplete = useCallback(async (stroke: Omit<Stroke, 'id'>) => {
