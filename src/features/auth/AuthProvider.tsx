@@ -1,6 +1,6 @@
 import { createContext, useEffect, useState, type ReactNode } from 'react'
 import type { User } from 'firebase/auth'
-import { onAuthStateChanged, getRedirectResult } from 'firebase/auth'
+import { onAuthStateChanged } from 'firebase/auth'
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore'
 import { auth, db } from '../../lib/firebase'
 
@@ -16,12 +16,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Process any pending redirect result as early as possible so that
-    // onAuthStateChanged fires with the user before BrowserRouter mounts.
-    // Errors here are non-fatal — the sign-in page handles them via its own
-    // getRedirectResult call if needed.
-    getRedirectResult(auth).catch(() => {})
-
     return onAuthStateChanged(auth, async (firebaseUser) => {
       try {
         if (firebaseUser) await ensureUserDoc(firebaseUser)

@@ -11,8 +11,9 @@ export function GoogleSignIn() {
 
   // Pick up any error from a previous redirect attempt
   useEffect(() => {
-    getRedirectResult(auth).catch(() => {
-      setError('Sign-in failed. Please try again.');
+    getRedirectResult(auth).catch((err) => {
+      console.error('[auth] getRedirectResult failed:', err?.code, err?.message)
+      setError(`Sign-in failed (${err?.code ?? 'unknown'}). Please try again.`)
     });
   }, []);
 
