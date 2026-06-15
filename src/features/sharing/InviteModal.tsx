@@ -1,10 +1,17 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
-  doc, runTransaction, collection, query, where, getDocs, arrayUnion,
+  doc, getDoc, runTransaction, collection, query, where, getDocs,
+  arrayUnion, updateDoc, arrayRemove,
 } from 'firebase/firestore'
-import { ref, set } from 'firebase/database'
+import { ref, set, remove } from 'firebase/database'
 import { db, rtdb } from '../../lib/firebase'
 import type { CanvasDoc } from '../../lib/types'
+
+interface MemberInfo {
+  displayName: string
+  email: string
+  photoURL: string
+}
 
 interface Props {
   canvas: CanvasDoc
@@ -15,6 +22,37 @@ export function InviteModal({ canvas, onClose }: Props) {
   const [email, setEmail] = useState('')
   const [status, setStatus] = useState<'idle' | 'sending' | 'done' | 'error'>('idle')
   const [message, setMessage] = useState('')
+  const [memberInfo, setMemberInfo] = useState<Record<string, MemberInfo>>({})
+  const fetchGenRef = useRef(0)
+
+  const membersJson = JSON.stringify(canvas.members)
+  useEffect(() => {
+    const members: string[] = JSON.parse(membersJson)
+    if (members.length === 0) { setMemberInfo({}); return }
+    const gen = ++fetchGenRef.current
+    const load = async () => {
+      const results: Record<string, MemberInfo> = {}
+      await Promise.all(members.map(async (uid) => {
+        try {
+          const snap = await getDoc(doc(db, 'users', uid))
+          if (snap.exists()) {
+            const d = snap.data()
+            results[uid] = {
+              displayName: d.displayName ?? uid,
+              email: d.email ?? '',
+              photoURL: d.photoURL ?? '',
+            }
+          } else {
+            results[uid] = { displayName: uid, email: '', photoURL: '' }
+          }
+        } catch {
+          results[uid] = { displayName: uid, email: '', photoURL: '' }
+        }
+      }))
+      if (gen === fetchGenRef.current) setMemberInfo(results)
+    }
+    load()
+  }, [membersJson])
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -84,6 +122,30 @@ export function InviteModal({ canvas, onClose }: Props) {
     }
   }
 
+  const handleRemoveMember = async (uid: string) => {
+    try {
+      await updateDoc(doc(db, 'canvases', canvas.id), { members: arrayRemove(uid) })
+    } catch {
+      setMessage('Failed to remove member.')
+      setStatus('error')
+      return
+    }
+    // Firestore is source of truth — member is already kicked via onSnapshot.
+    // Best-effort RTDB cleanup; log if it fails so it can be investigated.
+    remove(ref(rtdb, `canvases/${canvas.id}/access/members/${uid}`)).catch(err => {
+      console.error('[InviteModal] RTDB member access cleanup failed for', uid, err)
+    })
+  }
+
+  const handleCancelInvite = async (inviteEmail: string) => {
+    try {
+      await updateDoc(doc(db, 'canvases', canvas.id), { pendingInvites: arrayRemove(inviteEmail) })
+    } catch {
+      setMessage('Failed to cancel invite.')
+      setStatus('error')
+    }
+  }
+
   return (
     <div
       className="fixed inset-0 bg-ink/40 flex items-center justify-center z-50 p-4"
@@ -139,30 +201,79 @@ export function InviteModal({ canvas, onClose }: Props) {
         )}
 
         {(canvas.members.length > 0 || canvas.pendingInvites.length > 0) && (
-          <div className="mt-5 border-t-2 border-dashed border-ink/20 pt-4 flex flex-col gap-3">
+          <div className="mt-5 border-t-2 border-dashed border-ink/20 pt-4 flex flex-col gap-4 max-h-64 overflow-y-auto">
             {canvas.members.length > 0 && (
               <div>
-                <p className="font-hand text-xs text-ink/40 uppercase tracking-wider mb-1">Members</p>
-                <ul className="flex flex-col gap-1">
-                  {canvas.members.map((uid) => (
-                    <li key={uid} className="font-body text-xs text-ink/50 font-mono">{uid}</li>
-                  ))}
+                <p className="font-hand text-xs text-ink/40 uppercase tracking-wider mb-2">
+                  Members ({canvas.members.length})
+                </p>
+                {canvas.members.length > 0 && Object.keys(memberInfo).length === 0 && (
+                  <p className="font-body text-xs text-ink/30 italic">Loading…</p>
+                )}
+                <ul className="flex flex-col gap-2">
+                  {canvas.members.map((uid) => {
+                    const info = memberInfo[uid]
+                    return (
+                      <li key={uid} className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-full border-2 border-ink overflow-hidden shrink-0 bg-muted flex items-center justify-center">
+                          {info?.photoURL ? (
+                            <img src={info.photoURL} alt={info.displayName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                          ) : (
+                            <span className="font-hand text-xs text-ink">
+                              {info?.displayName?.[0]?.toUpperCase() ?? '?'}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-body text-sm text-ink truncate">
+                            {info?.displayName ?? uid}
+                          </p>
+                          {info?.email && (
+                            <p className="font-body text-xs text-ink/40 truncate">{info.email}</p>
+                          )}
+                        </div>
+                        <button
+                          className="shrink-0 font-body text-xs text-ink/30 hover:text-accent transition-colors px-1.5 py-0.5 border border-ink/20 hover:border-accent"
+                          style={{ borderRadius: '4px 8px 4px 8px / 8px 4px 8px 4px' }}
+                          onClick={() => handleRemoveMember(uid)}
+                          title="Remove member"
+                        >
+                          ✕
+                        </button>
+                      </li>
+                    )
+                  })}
                 </ul>
               </div>
             )}
             {canvas.pendingInvites.length > 0 && (
               <div>
-                <p className="font-hand text-xs text-ink/40 uppercase tracking-wider mb-1">Pending</p>
-                <ul className="flex flex-col gap-1">
-                  {canvas.pendingInvites.map((e) => (
-                    <li key={e} className="flex items-center gap-2 font-body text-xs text-ink/60">
-                      {e}
-                      <span
-                        className="text-[10px] px-1.5 py-0.5 bg-muted border border-ink/20 text-ink/40"
+                <p className="font-hand text-xs text-ink/40 uppercase tracking-wider mb-2">
+                  Pending ({canvas.pendingInvites.length})
+                </p>
+                <ul className="flex flex-col gap-2">
+                  {canvas.pendingInvites.map((inviteEmail) => (
+                    <li key={inviteEmail} className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-full border-2 border-dashed border-ink/30 flex items-center justify-center shrink-0">
+                        <span className="font-body text-xs text-ink/30">?</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-body text-sm text-ink/60 truncate">{inviteEmail}</p>
+                        <span
+                          className="font-body text-[10px] px-1.5 py-0.5 bg-muted border border-ink/20 text-ink/40"
+                          style={{ borderRadius: '4px 8px 4px 8px / 8px 4px 8px 4px' }}
+                        >
+                          pending
+                        </span>
+                      </div>
+                      <button
+                        className="shrink-0 font-body text-xs text-ink/30 hover:text-accent transition-colors px-1.5 py-0.5 border border-ink/20 hover:border-accent"
                         style={{ borderRadius: '4px 8px 4px 8px / 8px 4px 8px 4px' }}
+                        onClick={() => handleCancelInvite(inviteEmail)}
+                        title="Cancel invite"
                       >
-                        pending
-                      </span>
+                        ✕
+                      </button>
                     </li>
                   ))}
                 </ul>

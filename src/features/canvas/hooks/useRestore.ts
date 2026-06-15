@@ -8,18 +8,19 @@ const RTDB_CHUNK_SIZE = 200
 
 interface Options {
   canvasId: string
+  isLeader: boolean
   strokesLoaded: boolean
   strokeCount: number
   snapshotStrokeIds: string[] | undefined
   snapshotAt: { toMillis(): number } | null | undefined
 }
 
-export function useRestore({ canvasId, strokesLoaded, strokeCount, snapshotStrokeIds, snapshotAt }: Options) {
+export function useRestore({ canvasId, isLeader, strokesLoaded, strokeCount, snapshotStrokeIds, snapshotAt }: Options) {
   // Tracks which canvasId was last attempted — resets automatically on canvas navigation.
   const lastAttemptedCanvasId = useRef<string | null>(null)
 
   useEffect(() => {
-    if (!strokesLoaded) return
+    if (!strokesLoaded || !isLeader) return
     if (lastAttemptedCanvasId.current === canvasId) return
     if (strokeCount > 0) return
     if (!snapshotStrokeIds?.length) return
@@ -31,7 +32,7 @@ export function useRestore({ canvasId, strokesLoaded, strokeCount, snapshotStrok
       console.error('[useRestore] failed:', e)
       lastAttemptedCanvasId.current = null  // allow retry on transient error
     })
-  }, [strokesLoaded, strokeCount, snapshotStrokeIds, snapshotAt, canvasId])
+  }, [strokesLoaded, isLeader, strokeCount, snapshotStrokeIds, snapshotAt, canvasId])
 }
 
 async function restoreFromSnapshot(canvasId: string, snapshotStrokeIds: string[]) {

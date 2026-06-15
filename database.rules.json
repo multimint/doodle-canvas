@@ -25,7 +25,7 @@
               ".validate": "newData.val() === 'path' || newData.val() === 'rect' || newData.val() === 'circle' || newData.val() === 'line' || newData.val() === 'text' || newData.val() === 'eraser'"
             },
             "authorId": {
-              ".validate": "newData.val() === auth.uid"
+              ".validate": "root.child('canvases/' + $canvasId + '/access/members/' + newData.val()).val() === true || root.child('canvases/' + $canvasId + '/access/ownerId').val() === newData.val()"
             },
             "timestamp": {
               ".validate": "newData.isNumber()"

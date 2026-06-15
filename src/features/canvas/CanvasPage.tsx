@@ -69,6 +69,7 @@ export function CanvasPage() {
   useSnapshot({ canvasId: canvasId!, isLeader, strokes })
   useRestore({
     canvasId: canvasId!,
+    isLeader,
     strokesLoaded,
     strokeCount: strokes.length,
     snapshotStrokeIds: canvasDoc?.snapshotStrokeIds,
