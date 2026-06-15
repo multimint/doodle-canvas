@@ -21,5 +21,8 @@ dist-ssr
 .idea
 .DS_Store
 
+# Firebase CLI
+.firebase/
+
 # TypeScript
 *.tsbuildinfo
