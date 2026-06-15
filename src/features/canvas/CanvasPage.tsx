@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { doc, onSnapshot, updateDoc } from 'firebase/firestore'
+import { doc, onSnapshot, updateDoc, deleteField } from 'firebase/firestore'
 import { ref, get, set } from 'firebase/database'
+import { linkWithPopup, signInWithPopup, GoogleAuthProvider } from 'firebase/auth'
 import type Konva from 'konva'
-import { db, rtdb } from '../../lib/firebase'
+import { auth, db, rtdb } from '../../lib/firebase'
 import { useAuth } from '../auth/useAuth'
 import { useStrokes } from './hooks/useStrokes'
 import { useCursors } from './hooks/useCursors'
@@ -93,6 +94,25 @@ export function CanvasPage() {
       console.error('Failed to rename canvas:', err)
     }
   }, [titleDraft, canvasDoc?.title, canvasId])
+
+  const handleGuestSignIn = useCallback(async () => {
+    try {
+      await linkWithPopup(user!, new GoogleAuthProvider())
+      // Remove the TTL field now that the canvas is permanently owned
+      await updateDoc(doc(db, 'canvases', canvasId!), { deleteAt: deleteField() })
+    } catch (err) {
+      const code = (err as { code?: string })?.code
+      if (code === 'auth/credential-already-in-use') {
+        if (!confirm('This Google account already has an account. Your guest canvas will be lost. Sign in anyway?')) return
+        try {
+          await signInWithPopup(auth, new GoogleAuthProvider())
+        } catch {
+          // user closed popup or other error — stay as guest
+        }
+      }
+      // other errors: stay as guest silently
+    }
+  }, [canvasId])
 
   const handleStrokeComplete = useCallback(async (stroke: Omit<Stroke, 'id'>) => {
     if (atCap) return
@@ -238,6 +258,20 @@ export function CanvasPage() {
           </button>
         </div>
       </div>
+
+      {/* Guest banner */}
+      {user!.isAnonymous && (
+        <div className="flex items-center justify-center gap-3 px-4 py-2 bg-blue-pen/10 border-b-2 border-ink/20 shrink-0">
+          <span className="font-body text-sm text-ink/70">Your canvas will be lost in 7 days —</span>
+          <button
+            className="font-body text-sm px-3 py-1 bg-blue-pen text-white border-2 border-ink transition-all duration-100 hover:translate-x-[1px] hover:translate-y-[1px]"
+            style={{ borderRadius: '255px 15px 225px 15px / 15px 225px 15px 255px' }}
+            onClick={handleGuestSignIn}
+          >
+            Sign in with Google to keep it
+          </button>
+        </div>
+      )}
 
       {/* Cap banner */}
       {atCap && (

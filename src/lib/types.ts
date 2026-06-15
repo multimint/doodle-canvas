@@ -21,6 +21,7 @@ export interface CanvasDoc {
   updatedAt: number
   snapshotStrokeIds?: string[]
   snapshotAt?: { toMillis(): number } | null
+  deleteAt?: import('firebase/firestore').Timestamp
 }
 
 export interface StrokeData {

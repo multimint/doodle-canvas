@@ -24,5 +24,8 @@ The real-time record of which Users are currently active on a Canvas, including 
 ## Session
 The period a User is actively connected to a Canvas. Presence exists only within a Session.
 
+## Guest Session
+A Session in which the User is identified by a temporary anonymous account rather than a verified identity. A Guest may own and draw on a single Canvas. The Canvas is scheduled for automatic deletion 7 days after creation. If the Guest signs in with Google during the Session, the anonymous account is upgraded in place, the Canvas is retained, and the deletion schedule is cancelled. If the browser is closed without signing in, the Canvas is eventually purged.
+
 ## Undo Stack
 A per-client, in-memory list of Stroke IDs that the current User has created in this Session. Undo removes the most recent Stroke ID from the stack and deletes that Stroke from the Canvas. The Undo Stack is not persisted.
