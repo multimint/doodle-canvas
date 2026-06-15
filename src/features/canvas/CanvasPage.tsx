@@ -51,7 +51,7 @@ export function CanvasPage() {
       if (data.ownerId !== uid && !data.members.includes(uid)) { navigate('/'); return }
       setCanvasDoc(data)
       setLoadingDoc(false)
-    })
+    }, () => navigate('/'))
     return unsub
   }, [canvasId, uid, navigate])
 
