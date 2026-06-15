@@ -19,6 +19,8 @@ export interface CanvasDoc {
   height: 1080
   createdAt: number
   updatedAt: number
+  snapshotStrokeIds?: string[]
+  snapshotAt?: { toMillis(): number } | null
 }
 
 export interface StrokeData {

@@ -6,9 +6,11 @@ import type { Stroke } from '../../../lib/types'
 
 export function useStrokes(canvasId: string) {
   const [strokes, setStrokes] = useState<Stroke[]>([])
+  const [strokesLoaded, setStrokesLoaded] = useState(false)
   const basePath = `canvases/${canvasId}/strokes`
 
   useEffect(() => {
+    setStrokesLoaded(false)
     const strokesRef = ref(rtdb, basePath)
     const handle = onValue(strokesRef, (snap) => {
       const result: Stroke[] = []
@@ -17,6 +19,7 @@ export function useStrokes(canvasId: string) {
       })
       result.sort((a, b) => a.timestamp - b.timestamp)
       setStrokes(result)
+      setStrokesLoaded(true)
     })
     return () => off(strokesRef, 'value', handle)
   }, [canvasId, basePath])
@@ -36,5 +39,5 @@ export function useStrokes(canvasId: string) {
     await remove(ref(rtdb, basePath))
   }, [basePath])
 
-  return { strokes, atCap, addStroke, deleteStroke, clearAllStrokes }
+  return { strokes, strokesLoaded, atCap, addStroke, deleteStroke, clearAllStrokes }
 }

@@ -11,6 +11,7 @@ import { useUndoStack } from './hooks/useUndoStack'
 import { useLiveStrokes } from './hooks/useLiveStrokes'
 import type { LiveStroke } from './hooks/useLiveStrokes'
 import { useSnapshot } from './hooks/useSnapshot'
+import { useRestore } from './hooks/useRestore'
 import { DrawingStage } from './components/DrawingStage'
 import { Toolbar } from './components/Toolbar'
 import { CursorOverlay } from './components/CursorOverlay'
@@ -55,7 +56,7 @@ export function CanvasPage() {
     return unsub
   }, [canvasId, uid, navigate])
 
-  const { strokes, atCap, addStroke, deleteStroke, clearAllStrokes } = useStrokes(canvasId!)
+  const { strokes, strokesLoaded, atCap, addStroke, deleteStroke, clearAllStrokes } = useStrokes(canvasId!)
   const { cursors, emitCursor, clearCursor } = useCursors(canvasId!, uid, userColor)
   const { remoteStrokes, emitLiveStroke, clearLiveStroke } = useLiveStrokes(canvasId!, uid)
   const { presence, isLeader } = usePresence({
@@ -66,6 +67,14 @@ export function CanvasPage() {
     color: userColor,
   })
   useSnapshot({ canvasId: canvasId!, isLeader, strokes })
+  useRestore({
+    canvasId: canvasId!,
+    isLeader,
+    strokesLoaded,
+    strokeCount: strokes.length,
+    snapshotStrokeIds: canvasDoc?.snapshotStrokeIds,
+    snapshotAt: canvasDoc?.snapshotAt,
+  })
 
   const { push: pushUndo, pop: popUndo } = useUndoStack()
 
