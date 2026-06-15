@@ -16,9 +16,10 @@ interface MemberInfo {
 interface Props {
   canvas: CanvasDoc
   onClose: () => void
+  presenceUids?: string[]
 }
 
-export function InviteModal({ canvas, onClose }: Props) {
+export function InviteModal({ canvas, onClose, presenceUids = [] }: Props) {
   const [email, setEmail] = useState('')
   const [status, setStatus] = useState<'idle' | 'sending' | 'done' | 'error'>('idle')
   const [message, setMessage] = useState('')
@@ -215,13 +216,18 @@ export function InviteModal({ canvas, onClose }: Props) {
                     const info = memberInfo[uid]
                     return (
                       <li key={uid} className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-full border-2 border-ink overflow-hidden shrink-0 bg-muted flex items-center justify-center">
-                          {info?.photoURL ? (
-                            <img src={info.photoURL} alt={info.displayName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                          ) : (
-                            <span className="font-hand text-xs text-ink">
-                              {info?.displayName?.[0]?.toUpperCase() ?? '?'}
-                            </span>
+                        <div className="relative shrink-0">
+                          <div className="w-7 h-7 rounded-full border-2 border-ink overflow-hidden bg-muted flex items-center justify-center">
+                            {info?.photoURL ? (
+                              <img src={info.photoURL} alt={info.displayName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                            ) : (
+                              <span className="font-hand text-xs text-ink">
+                                {info?.displayName?.[0]?.toUpperCase() ?? '?'}
+                              </span>
+                            )}
+                          </div>
+                          {presenceUids.includes(uid) && (
+                            <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-green-500 border-2 border-white" />
                           )}
                         </div>
                         <div className="flex-1 min-w-0">

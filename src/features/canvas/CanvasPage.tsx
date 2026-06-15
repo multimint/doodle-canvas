@@ -248,7 +248,7 @@ export function CanvasPage() {
       </div>
 
       {showInvite && (
-        <InviteModal canvas={canvasDoc} onClose={() => setShowInvite(false)} />
+        <InviteModal canvas={canvasDoc} presenceUids={Object.keys(presence)} onClose={() => setShowInvite(false)} />
       )}
     </div>
   )
