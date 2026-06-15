@@ -10,10 +10,10 @@ A single drawing action recorded on a Canvas. A Stroke has a `type` (path, rect,
 The maximum number of Strokes a Canvas may hold (2,000). When the cap is reached, drawing is disabled and Members must clear the Canvas before adding new Strokes. Enforced in both RTDB Security Rules and the client.
 
 ## Member
-A User who has been granted access to a Canvas by its Owner. Members may draw, erase, and delete any Stroke on the Canvas.
+A User who has been granted access to a Canvas by its Owner. Members may draw, erase, and delete any Stroke on the Canvas. A Member may voluntarily **Leave** a Canvas; doing so revokes their access permanently until the Owner re-invites them. Strokes authored by a departing Member remain on the Canvas.
 
 ## Owner
-The User who created a Canvas. The Owner may invite others by email to become Members and may delete the Canvas.
+The User who created a Canvas. The Owner may invite others by email to become Members, remove any Member, cancel Pending Invites, and delete the Canvas.
 
 ## Pending Invite
 An email address recorded on a Canvas that has not yet been claimed. When a User logs in for the first time and their email matches a Pending Invite, they are promoted to Member automatically.

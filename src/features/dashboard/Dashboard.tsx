@@ -31,13 +31,10 @@ export function Dashboard() {
     }
     setCreating(true)
     try {
-      const title = prompt('Canvas name:', 'Untitled Canvas')
-      if (!title) return
-
       const canvasRef = doc(collection(db, 'canvases'))
       const batch = writeBatch(db)
       batch.set(canvasRef, {
-        title: title.trim() || 'Untitled Canvas',
+        title: 'Untitled Canvas',
         ownerId: uid,
         members: [],
         pendingInvites: [],

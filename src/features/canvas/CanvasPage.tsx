@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { doc, onSnapshot } from 'firebase/firestore'
+import { doc, onSnapshot, updateDoc } from 'firebase/firestore'
 import { ref, get, set } from 'firebase/database'
 import type Konva from 'konva'
 import { db, rtdb } from '../../lib/firebase'
@@ -30,6 +30,8 @@ export function CanvasPage() {
   const [loadingDoc, setLoadingDoc] = useState(true)
   const [showInvite, setShowInvite] = useState(false)
   const [viewport, setViewport] = useState({ zoom: 1, pan: { x: 0, y: 0 } })
+  const [editingTitle, setEditingTitle] = useState(false)
+  const [titleDraft, setTitleDraft] = useState('')
 
   const stageRef = useRef<Konva.Stage>(null)
   const prevToolRef = useRef<ToolType>('pen')
@@ -80,6 +82,17 @@ export function CanvasPage() {
     color: userColor,
   })
   const { push: pushUndo, pop: popUndo } = useUndoStack()
+
+  const handleTitleSave = useCallback(async () => {
+    const trimmed = titleDraft.trim()
+    setEditingTitle(false)
+    if (!trimmed || trimmed === canvasDoc?.title) return
+    try {
+      await updateDoc(doc(db, 'canvases', canvasId!), { title: trimmed })
+    } catch (err) {
+      console.error('Failed to rename canvas:', err)
+    }
+  }, [titleDraft, canvasDoc?.title, canvasId])
 
   const handleStrokeComplete = useCallback(async (stroke: Omit<Stroke, 'id'>) => {
     if (atCap) return
@@ -172,9 +185,27 @@ export function CanvasPage() {
           ← Dashboard
         </button>
 
-        <span className="font-hand text-lg text-ink flex-1 text-center truncate px-2">
-          {canvasDoc.title}
-        </span>
+        {isOwner && editingTitle ? (
+          <input
+            className="font-hand text-lg text-ink flex-1 text-center bg-transparent border-b-2 border-ink outline-none px-2 min-w-0"
+            value={titleDraft}
+            onChange={(e) => setTitleDraft(e.target.value)}
+            onBlur={handleTitleSave}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleTitleSave()
+              if (e.key === 'Escape') setEditingTitle(false)
+            }}
+            autoFocus
+          />
+        ) : (
+          <span
+            className={`font-hand text-lg text-ink flex-1 text-center truncate px-2 ${isOwner ? 'cursor-pointer hover:opacity-60' : ''}`}
+            onClick={() => { if (!isOwner) return; setTitleDraft(canvasDoc.title); setEditingTitle(true) }}
+            title={isOwner ? 'Click to rename' : undefined}
+          >
+            {canvasDoc.title}
+          </span>
+        )}
 
         <div className="flex items-center gap-2 shrink-0">
           <PresenceBar presence={presence} currentUid={uid} />
