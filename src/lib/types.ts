@@ -55,6 +55,7 @@ export interface PresenceEntry {
   displayName: string
   photoURL: string
   color: string
+  joinedAt: number
 }
 
 export const USER_COLORS = [

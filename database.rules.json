@@ -52,7 +52,10 @@
           "$uid": {
             ".read": "auth != null && root.child('canvases/' + $canvasId + '/access/members/' + auth.uid).val() === true",
             ".write": "auth != null && auth.uid === $uid && root.child('canvases/' + $canvasId + '/access/members/' + auth.uid).val() === true",
-            ".validate": "newData.hasChildren(['displayName', 'color']) || !newData.exists()"
+            ".validate": "newData.hasChildren(['displayName', 'color']) || !newData.exists()",
+            "joinedAt": {
+              ".validate": "newData.isNumber()"
+            }
           }
         }
       }

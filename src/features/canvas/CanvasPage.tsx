@@ -10,6 +10,7 @@ import { usePresence } from './hooks/usePresence'
 import { useUndoStack } from './hooks/useUndoStack'
 import { useLiveStrokes } from './hooks/useLiveStrokes'
 import type { LiveStroke } from './hooks/useLiveStrokes'
+import { useSnapshot } from './hooks/useSnapshot'
 import { DrawingStage } from './components/DrawingStage'
 import { Toolbar } from './components/Toolbar'
 import { CursorOverlay } from './components/CursorOverlay'
@@ -57,13 +58,15 @@ export function CanvasPage() {
   const { strokes, atCap, addStroke, deleteStroke, clearAllStrokes } = useStrokes(canvasId!)
   const { cursors, emitCursor, clearCursor } = useCursors(canvasId!, uid, userColor)
   const { remoteStrokes, emitLiveStroke, clearLiveStroke } = useLiveStrokes(canvasId!, uid)
-  const presence = usePresence({
+  const { presence, isLeader } = usePresence({
     canvasId: canvasId!,
     uid,
     displayName: user!.displayName ?? 'Anonymous',
     photoURL: user!.photoURL ?? '',
     color: userColor,
   })
+  useSnapshot({ canvasId: canvasId!, isLeader, strokes })
+
   const { push: pushUndo, pop: popUndo } = useUndoStack()
 
   const handleStrokeComplete = useCallback(async (stroke: Omit<Stroke, 'id'>) => {

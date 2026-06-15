@@ -32,14 +32,31 @@ service cloud.firestore {
         && request.resource.data.ownerId == request.auth.uid
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.canvasCount < 10;
 
-      // Update: owner can update anything; members can update snapshotUrl/snapshotStrokeId/updatedAt
+      // Update: owner can update anything; members can update snapshot fields
       allow update: if isAuthenticated() && (
         isOwner()
         || (isMember() && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['snapshotUrl', 'snapshotStrokeId', 'updatedAt']))
+            .hasOnly(['snapshotUrl', 'snapshotStrokeId', 'snapshotStrokeIds', 'snapshotAt', 'updatedAt']))
       );
 
       allow delete: if isAuthenticated() && isOwner();
+
+      // Stroke snapshot subcollection — durable Firestore mirror of RTDB strokes
+      // canAccess() cannot be reused here: `resource` resolves to the stroke doc
+      // inside this block, not the canvas doc. Fetch the parent explicitly.
+      match /strokes/{strokeId} {
+        function canvasData() {
+          return get(/databases/$(database)/documents/canvases/$(canvasId)).data;
+        }
+        allow read: if isAuthenticated() && (
+          canvasData().ownerId == request.auth.uid ||
+          request.auth.uid in canvasData().members
+        );
+        allow write: if isAuthenticated() && (
+          canvasData().ownerId == request.auth.uid ||
+          request.auth.uid in canvasData().members
+        );
+      }
     }
   }
 }
