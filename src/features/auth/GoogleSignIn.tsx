@@ -1,21 +1,19 @@
-import { useState, useEffect } from 'react';
-import { signInWithRedirect, getRedirectResult, GoogleAuthProvider } from 'firebase/auth';
+import { useState } from 'react';
+import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { auth } from '../../lib/firebase';
 
 export function GoogleSignIn() {
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    getRedirectResult(auth).catch((err) => {
-      const code = (err as { code?: string })?.code ?? 'unknown'
-      console.error('[auth] getRedirectResult failed:', code, err)
-      setError(`Sign-in failed (${code}). Please try again.`)
-    })
-  }, [])
-
-  const handleSignIn = () => {
+  const handleSignIn = async () => {
     setError(null);
-    signInWithRedirect(auth, new GoogleAuthProvider());
+    try {
+      await signInWithPopup(auth, new GoogleAuthProvider());
+    } catch (err) {
+      const code = (err as { code?: string })?.code ?? 'unknown';
+      console.error('[auth] signInWithPopup failed:', code, err);
+      setError(`Sign-in failed (${code}). Please try again.`);
+    }
   };
 
   return (
