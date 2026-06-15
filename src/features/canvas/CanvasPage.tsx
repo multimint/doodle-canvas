@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { doc, onSnapshot } from 'firebase/firestore'
+import { ref, get, set } from 'firebase/database'
 import type Konva from 'konva'
-import { db } from '../../lib/firebase'
+import { db, rtdb } from '../../lib/firebase'
 import { useAuth } from '../auth/useAuth'
 import { useStrokes } from './hooks/useStrokes'
 import { useCursors } from './hooks/useCursors'
@@ -55,6 +56,20 @@ export function CanvasPage() {
     })
     return unsub
   }, [canvasId, uid, navigate])
+
+  // Re-seed RTDB access entries immediately on canvas load.
+  // Needed after a full RTDB wipe — every read/write rule gates on access/members/{uid}.
+  useEffect(() => {
+    if (!canvasId) return
+    set(ref(rtdb, `canvases/${canvasId}/access/members/${uid}`), true).catch(console.error)
+  }, [canvasId, uid])
+
+  // Owner also re-seeds access/ownerId if it was wiped (only writable when absent).
+  useEffect(() => {
+    if (!canvasId || !canvasDoc || canvasDoc.ownerId !== uid) return
+    const ownerRef = ref(rtdb, `canvases/${canvasId}/access/ownerId`)
+    get(ownerRef).then(snap => { if (!snap.exists()) return set(ownerRef, uid) }).catch(console.error)
+  }, [canvasId, canvasDoc?.ownerId, uid])
 
   const { strokes, strokesLoaded, atCap, addStroke, deleteStroke, clearAllStrokes } = useStrokes(canvasId!)
   const { cursors, emitCursor, clearCursor } = useCursors(canvasId!, uid, userColor)
