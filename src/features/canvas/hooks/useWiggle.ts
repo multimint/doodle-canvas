@@ -15,18 +15,11 @@ const SPREAD    = 0.45
 interface WiggleEntry {
   node: Konva.Node
   stroke: Stroke
-  seed: number
 }
 
 interface LiveEntry {
   node: Konva.Line
   pointsRef: React.RefObject<number[]>
-}
-
-function seedFrom(id: string): number {
-  let s = 0
-  for (let i = 0; i < id.length; i++) s = id.charCodeAt(i) + ((s << 5) - s)
-  return s
 }
 
 export function useWiggle(
@@ -44,7 +37,7 @@ export function useWiggle(
   const runFrame = useCallback((t: DOMHighResTimeStamp) => {
     lastTRef.current = t
 
-    registryRef.current.forEach(({ node, stroke, seed }) => {
+    registryRef.current.forEach(({ node, stroke }) => {
       const { type, data } = stroke
 
       if (type === 'path' || type === 'line') {
@@ -53,14 +46,17 @@ export function useWiggle(
         for (let i = 0; i < raw.length; i += 2) {
           const idx = i / 2
           perturbed.push(
-            raw[i]     + Math.sin(t * FREQUENCY + idx * SPREAD       + seed) * AMPLITUDE,
-            raw[i + 1] + Math.cos(t * FREQUENCY + idx * SPREAD * 1.3 + seed) * AMPLITUDE,
+            raw[i]     + Math.sin(t * FREQUENCY + idx * SPREAD      ) * AMPLITUDE,
+            raw[i + 1] + Math.cos(t * FREQUENCY + idx * SPREAD * 1.3) * AMPLITUDE,
           )
         }
         ;(node as Konva.Line).points(perturbed)
       } else if (type === 'rect' || type === 'circle' || type === 'text') {
-        node.x((data.x ?? 0) + Math.sin(t * FREQUENCY + seed)       * AMPLITUDE)
-        node.y((data.y ?? 0) + Math.cos(t * FREQUENCY + seed * 1.3) * AMPLITUDE)
+        // Use position as spatial phase so nearby shapes don't wiggle in lockstep
+        const px = (data.x ?? 0) * 0.05
+        const py = (data.y ?? 0) * 0.05
+        node.x((data.x ?? 0) + Math.sin(t * FREQUENCY + px) * AMPLITUDE)
+        node.y((data.y ?? 0) + Math.cos(t * FREQUENCY + py) * AMPLITUDE)
       }
     })
 
@@ -128,7 +124,7 @@ export function useWiggle(
 
   const registerStroke = useCallback((id: string, node: Konva.Node, stroke: Stroke) => {
     if (stroke.type === 'eraser') return
-    registryRef.current.set(id, { node, stroke, seed: seedFrom(id) })
+    registryRef.current.set(id, { node, stroke })
   }, [])
 
   const unregisterStroke = useCallback((id: string) => {
