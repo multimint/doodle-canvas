@@ -57,14 +57,16 @@ export function brushSceneFunc(ctx: Konva.Context, shape: Konva.Shape) {
   // beginPath/fillShape go through the Konva proxy so hit-canvas colorKey is preserved.
   const c2d = (ctx as unknown as { _context: CanvasRenderingContext2D })._context
 
+  const move = frame % 4  // 0-3 pixels, cycles every 4 jitter frames (~320ms)
+
   ctx.beginPath()
   for (let i = 0; i < sp.length; i += 2) {
-    const idx = i >>> 1
-    const h1 = (((idx * 1103515245 + frame * 12345) | 0) >>> 0)
-    const h2 = (((idx * 214013   + frame * 2531011) | 0) >>> 0)
-    const x = Math.round(sp[i])     + (h1 % 3) - 1
-    const y = Math.round(sp[i + 1]) + (h2 % 3) - 1
-    c2d.rect(x, y, ds, ds)
+    const idx  = i >>> 1
+    // Direction is fixed per dot (hash of index only, no frame involvement)
+    const dir  = (((idx * 2246822519) | 0) >>> 0) % 4  // 0=right 1=left 2=down 3=up
+    const jx   = dir === 0 ?  move : dir === 1 ? -move : 0
+    const jy   = dir === 2 ?  move : dir === 3 ? -move : 0
+    c2d.rect(Math.round(sp[i]) + jx, Math.round(sp[i + 1]) + jy, ds, ds)
   }
   ctx.fillShape(shape)
 }
