@@ -4,8 +4,8 @@ const JITTER_MS = 80
 
 export function generateSprayPoints(rawPoints: number[], strokeWidth: number): number[] {
   const radius       = strokeWidth * 2.5
-  const STEP         = Math.max(2, strokeWidth / 2)  // pixels between clusters along path
-  const PER_CLUSTER  = 8                              // dots per cluster
+  const STEP         = Math.max(1, strokeWidth / 3)  // pixels between clusters along path
+  const PER_CLUSTER  = 16                             // dots per cluster
   const result: number[] = []
 
   let seed = 1

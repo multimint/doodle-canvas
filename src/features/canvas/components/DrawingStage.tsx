@@ -245,7 +245,7 @@ export function DrawingStage({
       case 'path':   return <Line {...common} points={data.points ?? []} stroke={data.stroke} strokeWidth={data.strokeWidth} lineCap="round" lineJoin="round" tension={0.5} />
       case 'brush': {
         const sprayPoints = generateSprayPoints(data.points ?? [], data.strokeWidth ?? 6)
-        const dotSize = Math.max(1, Math.round((data.strokeWidth ?? 6) / 3))
+        const dotSize = Math.max(1, Math.floor((data.strokeWidth ?? 6) / 6))
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         return <Shape {...common} fill={data.stroke} sceneFunc={brushSceneFunc} {...{ sprayPoints, dotSize, animT: 0 } as any} />
       }
@@ -266,7 +266,7 @@ export function DrawingStage({
       case 'path':   return <Line key={k} points={s.points} stroke={s.color} strokeWidth={s.strokeWidth} lineCap="round" lineJoin="round" tension={0.5} listening={false} />
       case 'brush': {
         const sprayPoints = generateSprayPoints(s.points, s.strokeWidth)
-        const dotSize = Math.max(1, Math.round(s.strokeWidth / 3))
+        const dotSize = Math.max(1, Math.floor(s.strokeWidth / 6))
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         return <Shape key={k} fill={s.color} sceneFunc={brushSceneFunc} listening={false} {...{ sprayPoints, dotSize, animT: 0 } as any} />
       }
@@ -311,7 +311,7 @@ export function DrawingStage({
       case 'pen':   return <Line ref={liveLineRef} points={livePoints} stroke={color} strokeWidth={strokeWidth} lineCap="round" lineJoin="round" tension={0.5} listening={false} />
       case 'brush': {
         const sprayPoints = generateSprayPoints(livePoints, strokeWidth)
-        const dotSize = Math.max(1, Math.round(strokeWidth / 3))
+        const dotSize = Math.max(1, Math.floor(strokeWidth / 6))
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         return <Shape ref={liveShapeRef} fill={color} sceneFunc={brushSceneFunc} listening={false} {...{ sprayPoints, dotSize, animT: 0 } as any} />
       }
