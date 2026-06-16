@@ -1,6 +1,7 @@
 import { useRef, useState, useCallback, useEffect } from 'react'
-import { Stage, Layer, Line, Rect, Ellipse, Text } from 'react-konva'
+import { Stage, Layer, Line, Rect, Ellipse, Text, Shape } from 'react-konva'
 import type Konva from 'konva'
+import { generateSprayPoints, brushSceneFunc } from '../utils/sprayUtils'
 import type { KonvaEventObject } from 'konva/lib/Node'
 import type { Stroke, ToolType } from '../../../lib/types'
 import { buildStrokeData } from '../utils/strokeSerializer'
@@ -38,8 +39,9 @@ export function DrawingStage({
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [containerSize, setContainerSize] = useState({ w: 0, h: 0 })
-  const layerRef    = useRef<Konva.Layer>(null)
-  const liveLineRef = useRef<Konva.Line>(null)
+  const layerRef     = useRef<Konva.Layer>(null)
+  const liveLineRef  = useRef<Konva.Line>(null)
+  const liveShapeRef = useRef<Konva.Shape>(null)
 
   // Viewport — refs for synchronous access in handlers, state for rendering
   const zoomRef = useRef(1)
@@ -241,7 +243,12 @@ export function DrawingStage({
     const common = { key: stroke.id, id: stroke.id, listening: true, onDblClick: () => onDeleteStroke(stroke.id), ref: getRefCb(stroke) }
     switch (stroke.type) {
       case 'path':   return <Line {...common} points={data.points ?? []} stroke={data.stroke} strokeWidth={data.strokeWidth} lineCap="round" lineJoin="round" tension={0.5} />
-      case 'brush':  return <Line {...common} points={data.points ?? []} stroke={data.stroke} strokeWidth={data.strokeWidth} lineCap="round" lineJoin="round" tension={0.5} dash={data.dash} />
+      case 'brush': {
+        const sprayPoints = generateSprayPoints(data.points ?? [], data.strokeWidth ?? 6)
+        const dotSize = Math.max(1, Math.round((data.strokeWidth ?? 6) / 3))
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return <Shape {...common} fill={data.stroke} sceneFunc={brushSceneFunc} {...{ sprayPoints, dotSize, animT: 0 } as any} />
+      }
       case 'eraser': return <Line {...common} points={data.points ?? []} stroke="rgba(0,0,0,1)" strokeWidth={data.strokeWidth} lineCap="round" lineJoin="round" tension={0.5} globalCompositeOperation="destination-out" />
       case 'rect':   return <Rect {...common} x={data.x} y={data.y} width={data.width} height={data.height} stroke={data.stroke} strokeWidth={data.strokeWidth} fill="transparent" />
       case 'circle': return <Ellipse {...common} x={data.x} y={data.y} radiusX={data.radiusX ?? 0} radiusY={data.radiusY ?? 0} stroke={data.stroke} strokeWidth={data.strokeWidth} fill="transparent" />
@@ -257,7 +264,12 @@ export function DrawingStage({
     const k = `live-${uid}`
     switch (s.type) {
       case 'path':   return <Line key={k} points={s.points} stroke={s.color} strokeWidth={s.strokeWidth} lineCap="round" lineJoin="round" tension={0.5} listening={false} />
-      case 'brush':  return <Line key={k} points={s.points} stroke={s.color} strokeWidth={s.strokeWidth} lineCap="round" lineJoin="round" tension={0.5} dash={[s.strokeWidth, s.strokeWidth * 1.5]} listening={false} />
+      case 'brush': {
+        const sprayPoints = generateSprayPoints(s.points, s.strokeWidth)
+        const dotSize = Math.max(1, Math.round(s.strokeWidth / 3))
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return <Shape key={k} fill={s.color} sceneFunc={brushSceneFunc} listening={false} {...{ sprayPoints, dotSize, animT: 0 } as any} />
+      }
       case 'eraser': return <Line key={k} points={s.points} stroke="rgba(0,0,0,1)" strokeWidth={s.strokeWidth} lineCap="round" lineJoin="round" tension={0.5} globalCompositeOperation="destination-out" listening={false} />
       case 'rect':   return <Rect key={k} x={Math.min(x1,x2)} y={Math.min(y1,y2)} width={Math.abs(x2-x1)} height={Math.abs(y2-y1)} stroke={s.color} strokeWidth={s.strokeWidth} fill="transparent" listening={false} />
       case 'circle': return <Ellipse key={k} x={(x1+x2)/2} y={(y1+y2)/2} radiusX={Math.abs(x2-x1)/2} radiusY={Math.abs(y2-y1)/2} stroke={s.color} strokeWidth={s.strokeWidth} fill="transparent" listening={false} />
@@ -267,15 +279,20 @@ export function DrawingStage({
   }
 
   useEffect(() => {
-    const node = liveLineRef.current
-    if (livePoints.length >= 4 && node) {
-      registerLive(node, livePointsRef)
+    if (livePoints.length >= 4) {
+      if (tool === 'brush') {
+        const node = liveShapeRef.current
+        if (node) registerLive(node, null)
+      } else {
+        const node = liveLineRef.current
+        if (node) registerLive(node, livePointsRef)
+      }
     } else {
       unregisterLive()
     }
     return () => unregisterLive()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [livePoints.length >= 4])
+  }, [livePoints.length >= 4, tool])
 
   // Clear the live line once the Firebase-confirmed stroke arrives so the stroke
   // is never invisible between mouseup and the committed shape mounting.
@@ -291,8 +308,13 @@ export function DrawingStage({
     if (livePoints.length < 4) return null
     const [x1, y1, x2, y2] = livePoints
     switch (tool) {
-      case 'pen':    return <Line ref={liveLineRef} points={livePoints} stroke={color} strokeWidth={strokeWidth} lineCap="round" lineJoin="round" tension={0.5} listening={false} />
-      case 'brush':  return <Line ref={liveLineRef} points={livePoints} stroke={color} strokeWidth={strokeWidth} lineCap="round" lineJoin="round" tension={0.5} dash={[strokeWidth, strokeWidth * 1.5]} listening={false} />
+      case 'pen':   return <Line ref={liveLineRef} points={livePoints} stroke={color} strokeWidth={strokeWidth} lineCap="round" lineJoin="round" tension={0.5} listening={false} />
+      case 'brush': {
+        const sprayPoints = generateSprayPoints(livePoints, strokeWidth)
+        const dotSize = Math.max(1, Math.round(strokeWidth / 3))
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return <Shape ref={liveShapeRef} fill={color} sceneFunc={brushSceneFunc} listening={false} {...{ sprayPoints, dotSize, animT: 0 } as any} />
+      }
       case 'eraser': return <Line points={livePoints} stroke="rgba(0,0,0,1)" strokeWidth={strokeWidth} lineCap="round" lineJoin="round" tension={0.5} globalCompositeOperation="destination-out" listening={false} />
       case 'rect':   return <Rect x={Math.min(x1,x2)} y={Math.min(y1,y2)} width={Math.abs(x2-x1)} height={Math.abs(y2-y1)} stroke={color} strokeWidth={strokeWidth} fill="transparent" listening={false} />
       case 'circle': return <Ellipse x={(x1+x2)/2} y={(y1+y2)/2} radiusX={Math.abs(x2-x1)/2} radiusY={Math.abs(y2-y1)/2} stroke={color} strokeWidth={strokeWidth} fill="transparent" listening={false} />

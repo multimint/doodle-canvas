@@ -8,10 +8,9 @@ import type { Stroke } from '../../../lib/types'
 // only repaints are the layer.draw() calls in runFrame and useLayoutEffect below.
 Konva.autoDrawEnabled = false
 
-const AMPLITUDE  = 2.5
-const FREQUENCY  = 0.0018
-const SPREAD     = 0.45
-const DASH_SPEED = 0.1   // px/ms — how fast the gap travels along the line
+const AMPLITUDE = 2.5
+const FREQUENCY = 0.0018
+const SPREAD    = 0.45
 
 interface WiggleEntry {
   node: Konva.Node
@@ -19,8 +18,9 @@ interface WiggleEntry {
 }
 
 interface LiveEntry {
-  node: Konva.Line
-  pointsRef: React.RefObject<number[]>
+  node: Konva.Line | Konva.Shape
+  // non-null for pen (wiggle points), null for brush (animT only)
+  pointsRef: React.RefObject<number[]> | null
 }
 
 export function useWiggle(
@@ -31,13 +31,10 @@ export function useWiggle(
   const liveEntryRef = useRef<LiveEntry | null>(null)
   const rafRef       = useRef<number>(0)
   const enabledRef   = useRef(enabled)
-  const lastTRef     = useRef<DOMHighResTimeStamp>(0)
 
   useEffect(() => { enabledRef.current = enabled }, [enabled])
 
   const runFrame = useCallback((t: DOMHighResTimeStamp) => {
-    lastTRef.current = t
-
     registryRef.current.forEach(({ node, stroke }) => {
       const { type, data } = stroke
 
@@ -53,18 +50,8 @@ export function useWiggle(
         }
         ;(node as Konva.Line).points(perturbed)
       } else if (type === 'brush') {
-        const raw = data.points ?? []
-        const perturbed: number[] = []
-        for (let i = 0; i < raw.length; i += 2) {
-          const idx = i / 2
-          perturbed.push(
-            raw[i]     + Math.sin(t * FREQUENCY + idx * SPREAD      ) * AMPLITUDE,
-            raw[i + 1] + Math.cos(t * FREQUENCY + idx * SPREAD * 1.3) * AMPLITUDE,
-          )
-        }
-        ;(node as Konva.Line).points(perturbed)
-        const cycle = (data.strokeWidth ?? 6) * 2.5
-        ;(node as Konva.Line).dashOffset(-(t * DASH_SPEED) % cycle)
+        // Spray dots animate via animT read by the custom sceneFunc each redraw
+        node.setAttr('animT', t)
       } else if (type === 'rect' || type === 'circle' || type === 'text') {
         // Use position as spatial phase so nearby shapes don't wiggle in lockstep
         const px = (data.x ?? 0) * 0.05
@@ -76,21 +63,23 @@ export function useWiggle(
 
     const live = liveEntryRef.current
     if (live && live.node.getLayer()) {
-      const raw = live.pointsRef.current ?? []
-      if (raw.length >= 4) {
-        const perturbed: number[] = []
-        for (let i = 0; i < raw.length; i += 2) {
-          const idx = i / 2
-          perturbed.push(
-            raw[i]     + Math.sin(t * FREQUENCY + idx * SPREAD      ) * AMPLITUDE,
-            raw[i + 1] + Math.cos(t * FREQUENCY + idx * SPREAD * 1.3) * AMPLITUDE,
-          )
+      if (live.pointsRef) {
+        // Pen: wiggle the points
+        const raw = live.pointsRef.current ?? []
+        if (raw.length >= 4) {
+          const perturbed: number[] = []
+          for (let i = 0; i < raw.length; i += 2) {
+            const idx = i / 2
+            perturbed.push(
+              raw[i]     + Math.sin(t * FREQUENCY + idx * SPREAD      ) * AMPLITUDE,
+              raw[i + 1] + Math.cos(t * FREQUENCY + idx * SPREAD * 1.3) * AMPLITUDE,
+            )
+          }
+          ;(live.node as Konva.Line).points(perturbed)
         }
-        live.node.points(perturbed)
-        if (live.node.dash().length > 0) {
-          const cycle = live.node.strokeWidth() * 2.5
-          live.node.dashOffset(-(t * DASH_SPEED) % cycle)
-        }
+      } else {
+        // Brush: advance the spray jitter clock
+        live.node.setAttr('animT', t)
       }
     }
 
@@ -109,15 +98,20 @@ export function useWiggle(
       if (type === 'path' || type === 'line') {
         ;(node as Konva.Line).points(data.points ?? [])
       } else if (type === 'brush') {
-        ;(node as Konva.Line).points(data.points ?? [])
-        ;(node as Konva.Line).dashOffset(0)
+        node.setAttr('animT', 0)
       } else if (type === 'rect' || type === 'circle' || type === 'text') {
         node.x(data.x ?? 0)
         node.y(data.y ?? 0)
       }
     })
     const live = liveEntryRef.current
-    if (live) live.node.points(live.pointsRef.current ?? [])
+    if (live) {
+      if (live.pointsRef) {
+        ;(live.node as Konva.Line).points(live.pointsRef.current ?? [])
+      } else {
+        live.node.setAttr('animT', 0)
+      }
+    }
     layerRef.current?.draw()
   }, [layerRef])
 
@@ -152,7 +146,10 @@ export function useWiggle(
     registryRef.current.delete(id)
   }, [])
 
-  const registerLive = useCallback((node: Konva.Line, pointsRef: React.RefObject<number[]>) => {
+  const registerLive = useCallback((
+    node: Konva.Line | Konva.Shape,
+    pointsRef: React.RefObject<number[]> | null,
+  ) => {
     liveEntryRef.current = { node, pointsRef }
   }, [])
 

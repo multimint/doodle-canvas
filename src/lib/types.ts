@@ -37,7 +37,6 @@ export interface StrokeData {
   stroke?: string
   strokeWidth?: number
   fill?: string
-  dash?: number[]
   globalCompositeOperation?: string
 }
 

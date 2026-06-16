@@ -49,7 +49,7 @@ export function buildStrokeData(
     return { points, stroke: color, strokeWidth }
   }
   if (tool === 'brush') {
-    return { points, stroke: color, strokeWidth, dash: [strokeWidth, strokeWidth * 1.5] }
+    return { points, stroke: color, strokeWidth }
   }
   if (tool === 'line') {
     return { points, stroke: color, strokeWidth }
