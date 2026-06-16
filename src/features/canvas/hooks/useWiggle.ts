@@ -8,9 +8,6 @@ import type { Stroke } from '../../../lib/types'
 // only repaints are the layer.draw() calls in runFrame and useLayoutEffect below.
 Konva.autoDrawEnabled = false
 
-const AMPLITUDE = 2.5
-const FREQUENCY = 0.0018
-// (used by rect/circle/text wiggle — path/line strokes are intentionally static)
 
 interface WiggleEntry {
   node: Konva.Node
@@ -36,16 +33,8 @@ export function useWiggle(
 
   const runFrame = useCallback((t: DOMHighResTimeStamp) => {
     registryRef.current.forEach(({ node, stroke }) => {
-      const { type, data } = stroke
-
-      if (type === 'brush') {
+      if (stroke.type === 'brush') {
         node.setAttr('animT', t)
-      } else if (type === 'rect' || type === 'circle' || type === 'text') {
-        // Use position as spatial phase so nearby shapes don't wiggle in lockstep
-        const px = (data.x ?? 0) * 0.05
-        const py = (data.y ?? 0) * 0.05
-        node.x((data.x ?? 0) + Math.sin(t * FREQUENCY + px) * AMPLITUDE)
-        node.y((data.y ?? 0) + Math.cos(t * FREQUENCY + py) * AMPLITUDE)
       }
     })
 
@@ -66,13 +55,7 @@ export function useWiggle(
 
   const resetAll = useCallback(() => {
     registryRef.current.forEach(({ node, stroke }) => {
-      const { type, data } = stroke
-      if (type === 'brush') {
-        node.setAttr('animT', 0)
-      } else if (type === 'rect' || type === 'circle' || type === 'text') {
-        node.x(data.x ?? 0)
-        node.y(data.y ?? 0)
-      }
+      if (stroke.type === 'brush') node.setAttr('animT', 0)
     })
     const live = liveEntryRef.current
     if (live && !live.pointsRef) {
