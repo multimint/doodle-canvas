@@ -121,7 +121,7 @@ export function CanvasCard({ canvas, isOwner, uid }: Props) {
         {/* Thumbnail */}
         <div style={{
           height: 148, borderRadius: 14, overflow: 'hidden', position: 'relative',
-          background: 'radial-gradient(rgba(20,23,45,.07) 1.1px, transparent 1.2px) -1px -1px / 13px 13px, #fbfcfe',
+          background: 'radial-gradient(rgba(45,39,34,.07) 1.1px, transparent 1.2px) -1px -1px / 13px 13px, #fffdf8',
           boxShadow: 'inset 0 0 0 1px rgba(20,23,45,.04)',
         }}>
           {/* Drifting glow accent */}

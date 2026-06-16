@@ -43,6 +43,13 @@ export function CanvasPage() {
   const toolRef = useRef<ToolType>('pen')
   const spaceActivatedHandRef = useRef(false)
 
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 640)
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 640)
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
+
   const [tool, setTool] = useState<ToolType>('pen')
   const [color, setColor] = useState('#14151c')
   const [strokeWidth, setStrokeWidth] = useState(6)
@@ -382,16 +389,18 @@ export function CanvasPage() {
       )}
 
       {/* Workspace */}
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        <Toolbar
-          tool={tool}
-          color={color}
-          strokeWidth={strokeWidth}
-          onToolChange={setTool}
-          onColorChange={setColor}
-          onStrokeWidthChange={setStrokeWidth}
-          onClear={handleClearCanvas}
-        />
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden', flexDirection: isMobile ? 'column' : 'row' }}>
+        {!isMobile && (
+          <Toolbar
+            tool={tool}
+            color={color}
+            strokeWidth={strokeWidth}
+            onToolChange={setTool}
+            onColorChange={setColor}
+            onStrokeWidthChange={setStrokeWidth}
+            onClear={handleClearCanvas}
+          />
+        )}
 
         <div style={{ flex: 1, overflow: 'hidden' }} className="m-canvas-surface">
           <DrawingStage
@@ -411,6 +420,19 @@ export function CanvasPage() {
             onLiveUpdate={handleLiveUpdate}
           />
         </div>
+
+        {isMobile && (
+          <Toolbar
+            tool={tool}
+            color={color}
+            strokeWidth={strokeWidth}
+            onToolChange={setTool}
+            onColorChange={setColor}
+            onStrokeWidthChange={setStrokeWidth}
+            onClear={handleClearCanvas}
+            horizontal
+          />
+        )}
       </div>
 
       {showInvite && (

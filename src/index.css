@@ -6,14 +6,14 @@
    MODERN PLAYFUL DESIGN SYSTEM
    ============================ */
 :root {
-  --m-bg:      #f4f5fb;
-  --m-bg-2:    #eceefb;
-  --m-surface: #ffffff;
-  --m-ink:     #14151c;
-  --m-ink-2:   #565a6e;
-  --m-ink-3:   #9298ad;
-  --m-line:    #e7e9f3;
-  --m-line-2:  #d9dcec;
+  --m-bg:      #faf5ee;
+  --m-bg-2:    #f2e9dc;
+  --m-surface: #fffdf8;
+  --m-ink:     #2d2722;
+  --m-ink-2:   #6c6056;
+  --m-ink-3:   #a99d8d;
+  --m-line:    #ece1d2;
+  --m-line-2:  #ddd0bd;
   --m-blue:    #3d5afe;
   --m-coral:   #ff5d73;
   --m-amber:   #ffb01f;
@@ -28,8 +28,8 @@
   --m-shadow-sm: 0 1px 2px rgba(20,23,45,.05), 0 3px 8px rgba(20,23,45,.05);
   --m-shadow:    0 2px 6px rgba(20,23,45,.05), 0 16px 34px rgba(20,23,45,.10);
   --m-shadow-lg: 0 4px 10px rgba(20,23,45,.06), 0 30px 60px rgba(20,23,45,.16);
-  --disp: 'Fredoka', system-ui, sans-serif;
-  --ui:   'Space Grotesk', system-ui, sans-serif;
+  --disp: 'Patrick Hand', system-ui, sans-serif;
+  --ui:   'Quicksand', system-ui, sans-serif;
 }
 
 @layer base {
@@ -152,7 +152,7 @@
 .m-canvas-surface {
   background: radial-gradient(circle at 1px 1px, var(--m-line-2) 1.3px, transparent 0);
   background-size: 26px 26px;
-  background-color: #fcfcff;
+  background-color: #fffdf7;
 }
 
 /* creating canvas overlay */
@@ -393,7 +393,7 @@
 
 /* Legacy utility */
 .paper-dots {
-  background-color: #fcfcff;
+  background-color: #fffdf7;
   background-image: radial-gradient(circle at 1px 1px, var(--m-line-2) 1.3px, transparent 0);
   background-size: 26px 26px;
 }

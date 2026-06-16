@@ -248,6 +248,7 @@ function Stage({ children, compact }: { children?: React.ReactNode; compact?: bo
       className="m-canvas-surface"
       style={{ position: 'relative', overflow: 'hidden', width: '100%', height: '100%' }}
     >
+      <DoodleDefs />
       <ParallaxField />
       <DoodleField compact={compact} />
       {children}
@@ -275,6 +276,45 @@ function LivePill() {
       <span className="m-live-dot" />
       <span style={{ fontSize: 12.5, color: 'var(--m-ink-2)', fontWeight: 500 }}><b style={{ color: 'var(--m-ink)', fontWeight: 700 }}>1,204</b> doodling now</span>
     </div>
+  )
+}
+
+/* ---------- SVG doodle filters (roughen + boil) ---------- */
+function DoodleDefs() {
+  return (
+    <svg width="0" height="0" aria-hidden="true" style={{ position: 'absolute' }}>
+      <defs>
+        <filter id="dood-rough" x="-30%" y="-30%" width="160%" height="160%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.018" numOctaves="2" seed="4" result="n" />
+          <feDisplacementMap in="SourceGraphic" in2="n" scale="2.6" xChannelSelector="R" yChannelSelector="G" />
+        </filter>
+        <filter id="dood-boil" x="-30%" y="-30%" width="160%" height="160%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="1" result="n">
+            <animate attributeName="baseFrequency" dur="6.3s" repeatCount="indefinite"
+              values="0.020;0.024;0.018;0.022;0.020" />
+            <animate attributeName="seed" dur="11s" repeatCount="indefinite"
+              values="1;4;7;2;1" calcMode="discrete" />
+          </feTurbulence>
+          <feDisplacementMap in="SourceGraphic" in2="n" xChannelSelector="R" yChannelSelector="G">
+            <animate attributeName="scale" dur="3.7s" repeatCount="indefinite"
+              values="1.1;1.7;1.3;1.6;1.1" />
+          </feDisplacementMap>
+        </filter>
+      </defs>
+    </svg>
+  )
+}
+
+/* ---------- wobbly hand-drawn underline ---------- */
+function Squiggle({ color = 'var(--m-primary)', width = 120, height = 13, sw = 4, style }: {
+  color?: string; width?: number | string; height?: number; sw?: number; style?: React.CSSProperties
+}) {
+  return (
+    <svg width={width} height={height} viewBox="0 0 120 13" fill="none" preserveAspectRatio="none"
+      style={{ display: 'block', overflow: 'visible', ...style }}>
+      <path d="M4 8 C 22 2, 38 12, 56 7 S 90 2, 116 8" stroke={color} strokeWidth={sw}
+        strokeLinecap="round" filter="url(#dood-boil)" />
+    </svg>
   )
 }
 
@@ -308,10 +348,16 @@ function SignInPanel({ onSignIn, onGuest, guestLoading, error, compact = false, 
     }}>
       {sheet && <div style={{ height: 2 }} />}
       <div className="m-eyebrow m-enter" style={d(0.12)}>Collaborative whiteboard</div>
-      <div className="m-h1 m-enter" style={{ fontSize: compact ? 31 : 40, lineHeight: 1.05, ...d(0.18) }}>
-        A space to<br /><RotWord words={['sketch', 'plan', 'brainstorm', 'riff', 'play']} /><br />together.
+      <div className="m-h1 m-enter" style={{ fontSize: compact ? 36 : 46, lineHeight: 1.12, ...d(0.18) }}>
+        A space to<br />
+        <span style={{ position: 'relative', display: 'inline-block' }}>
+          <RotWord words={['sketch', 'plan', 'brainstorm', 'riff', 'play']} />
+          <Squiggle color="var(--m-primary)" width="100%" height={10} sw={4.5}
+            style={{ position: 'absolute', left: 0, right: 0, bottom: -4 }} />
+        </span>
+        <br />together.
       </div>
-      <div className="m-lead m-enter" style={{ fontSize: compact ? 14.5 : 16, ...d(0.26) }}>
+      <div className="m-lead m-enter" style={{ fontSize: compact ? 16 : 18, fontFamily: 'var(--disp)', lineHeight: 1.45, ...d(0.26) }}>
         Sign in to open your canvases and pick up exactly where you and your collaborators left off.
       </div>
       <div className="m-col m-g10 m-enter" style={{ marginTop: 4, ...d(0.34) }}>
@@ -430,7 +476,7 @@ export function GoogleSignIn() {
         </div>
 
         <div className="m-row m-g6 m-enter" style={{ position: 'absolute', bottom: 26, left: 0, right: 0, justifyContent: 'center', zIndex: 5, fontSize: 13, color: 'var(--m-ink-3)', animationDelay: '.6s' }}>
-          <Icon name="pen" size={14} color="var(--m-primary)" /> Move your cursor — the scene drifts with you.
+          <Icon name="pen" size={14} color="var(--m-primary)" /> Where every idea finds its shape — together.
         </div>
       </Stage>
     </div>
