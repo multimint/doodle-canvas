@@ -22,7 +22,7 @@
           "$strokeId": {
             ".validate": "newData.hasChildren(['type', 'authorId', 'data', 'timestamp'])",
             "type": {
-              ".validate": "newData.val() === 'path' || newData.val() === 'rect' || newData.val() === 'circle' || newData.val() === 'line' || newData.val() === 'text' || newData.val() === 'eraser'"
+              ".validate": "newData.val() === 'path' || newData.val() === 'brush' || newData.val() === 'rect' || newData.val() === 'circle' || newData.val() === 'line' || newData.val() === 'text' || newData.val() === 'eraser'"
             },
             "authorId": {
               ".validate": "root.child('canvases/' + $canvasId + '/access/members/' + newData.val()).val() === true || root.child('canvases/' + $canvasId + '/access/ownerId').val() === newData.val()"
