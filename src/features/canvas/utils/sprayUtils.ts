@@ -1,10 +1,11 @@
 import type Konva from 'konva'
 
-const JITTER_MS = 80  // discrete jitter interval — ~12 hops per second
+const JITTER_MS = 80
 
 export function generateSprayPoints(rawPoints: number[], strokeWidth: number): number[] {
-  const radius = strokeWidth * 2.5
-  const dotsPerSample = 12
+  const radius       = strokeWidth * 2.5
+  const STEP         = Math.max(2, strokeWidth / 2)  // pixels between clusters along path
+  const PER_CLUSTER  = 8                              // dots per cluster
   const result: number[] = []
 
   let seed = 1
@@ -13,27 +14,47 @@ export function generateSprayPoints(rawPoints: number[], strokeWidth: number): n
     return (seed >>> 0) / 0x100000000
   }
 
-  // Sample every other raw point (step = 4 numbers = every 2nd point)
-  for (let i = 0; i + 1 < rawPoints.length; i += 4) {
-    const cx = rawPoints[i]
-    const cy = rawPoints[i + 1]
-    for (let j = 0; j < dotsPerSample; j++) {
+  const place = (cx: number, cy: number) => {
+    for (let j = 0; j < PER_CLUSTER; j++) {
       const angle = rand() * Math.PI * 2
-      // rand()*rand() = quadratic falloff: dense at center, sparse at edge
-      const dist = rand() * rand() * radius
+      const dist  = rand() * rand() * radius  // quadratic: dense at center, sparse at edge
       result.push(cx + Math.cos(angle) * dist, cy + Math.sin(angle) * dist)
     }
   }
+
+  if (rawPoints.length < 2) return result
+
+  // Place first cluster at stroke start
+  place(rawPoints[0], rawPoints[1])
+
+  // Walk each segment at fixed arc-length steps so density is drawing-speed independent
+  let distSinceLast = 0
+  for (let i = 0; i + 3 < rawPoints.length; i += 2) {
+    const x0 = rawPoints[i],     y0 = rawPoints[i + 1]
+    const x1 = rawPoints[i + 2], y1 = rawPoints[i + 3]
+    const dx = x1 - x0, dy = y1 - y0
+    const segLen = Math.hypot(dx, dy)
+    if (segLen === 0) continue
+
+    let d = STEP - distSinceLast  // distance to first cluster in this segment
+    while (d <= segLen) {
+      const t = d / segLen
+      place(x0 + dx * t, y0 + dy * t)
+      d += STEP
+    }
+    distSinceLast = segLen - (d - STEP)  // carry-over distance for next segment
+  }
+
   return result
 }
 
 export function brushSceneFunc(ctx: Konva.Context, shape: Konva.Shape) {
-  const t   = (shape.getAttr('animT')      as number)   ?? 0
+  const t   = (shape.getAttr('animT')       as number)   ?? 0
   const sp  = (shape.getAttr('sprayPoints') as number[]) ?? []
-  const ds  = (shape.getAttr('dotSize')    as number)   ?? 2
+  const ds  = (shape.getAttr('dotSize')     as number)   ?? 2
   const frame = Math.floor(t / JITTER_MS)
-  // Access underlying canvas2D to call rect() (path method not exposed on Konva.Context).
-  // beginPath/fillShape go through the Konva proxy so hit-canvas colorKey is handled correctly.
+  // Use underlying canvas2D for rect() (path method not exposed on Konva.Context).
+  // beginPath/fillShape go through the Konva proxy so hit-canvas colorKey is preserved.
   const c2d = (ctx as unknown as { _context: CanvasRenderingContext2D })._context
 
   ctx.beginPath()
@@ -43,7 +64,7 @@ export function brushSceneFunc(ctx: Konva.Context, shape: Konva.Shape) {
     const h2 = (((idx * 214013   + frame * 2531011) | 0) >>> 0)
     const x = Math.round(sp[i])     + (h1 % 3) - 1
     const y = Math.round(sp[i + 1]) + (h2 % 3) - 1
-    c2d.rect(x, y, ds, ds)  // square pixel added to shared path
+    c2d.rect(x, y, ds, ds)
   }
-  ctx.fillShape(shape)  // fills with shape.fill() on scene, colorKey on hit canvas
+  ctx.fillShape(shape)
 }
