@@ -49,9 +49,6 @@ export function useWiggle(
           )
         }
         ;(node as Konva.Line).points(perturbed)
-      } else if (type === 'brush') {
-        // Spray dots animate via animT read by the custom sceneFunc each redraw
-        node.setAttr('animT', t)
       } else if (type === 'rect' || type === 'circle' || type === 'text') {
         // Use position as spatial phase so nearby shapes don't wiggle in lockstep
         const px = (data.x ?? 0) * 0.05
@@ -77,9 +74,6 @@ export function useWiggle(
           }
           ;(live.node as Konva.Line).points(perturbed)
         }
-      } else {
-        // Brush: advance the spray jitter clock
-        live.node.setAttr('animT', t)
       }
     }
 
