@@ -1,15 +1,26 @@
 import { useRef, useCallback } from 'react'
+import type { Stroke } from '../../../lib/types'
 
 export function useUndoStack() {
-  const stackRef = useRef<string[]>([])
+  const undoStack = useRef<string[]>([])
+  const redoStack = useRef<Omit<Stroke, 'id'>[]>([])
 
   const push = useCallback((strokeId: string) => {
-    stackRef.current.push(strokeId)
+    undoStack.current.push(strokeId)
+    redoStack.current = []
   }, [])
 
   const pop = useCallback((): string | undefined => {
-    return stackRef.current.pop()
+    return undoStack.current.pop()
   }, [])
 
-  return { push, pop }
+  const pushRedo = useCallback((stroke: Omit<Stroke, 'id'>) => {
+    redoStack.current.push(stroke)
+  }, [])
+
+  const popRedo = useCallback((): Omit<Stroke, 'id'> | undefined => {
+    return redoStack.current.pop()
+  }, [])
+
+  return { push, pop, pushRedo, popRedo }
 }

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ref, get } from 'firebase/database'
 import { Stage, Layer, Line, Rect, Ellipse, Text } from 'react-konva'
 import { rtdb } from '../../lib/firebase'
+import { Icon } from '../../lib/icons'
 import type { Stroke } from '../../lib/types'
 
 const CANVAS_W = 1920
@@ -9,12 +10,14 @@ const CANVAS_H = 1080
 
 interface Props {
   canvasId: string
+  accentColor?: string
 }
 
-export function CanvasPreview({ canvasId }: Props) {
+export function CanvasPreview({ canvasId, accentColor = '#3d5afe' }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ w: 0, h: 0 })
   const [strokes, setStrokes] = useState<Stroke[]>([])
+  const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
     const el = containerRef.current
@@ -28,6 +31,7 @@ export function CanvasPreview({ canvasId }: Props) {
   }, [])
 
   useEffect(() => {
+    setLoaded(false)
     get(ref(rtdb, `canvases/${canvasId}/strokes`))
       .then((snap) => {
         const result: Stroke[] = []
@@ -36,8 +40,9 @@ export function CanvasPreview({ canvasId }: Props) {
         })
         result.sort((a, b) => a.timestamp - b.timestamp)
         setStrokes(result)
+        setLoaded(true)
       })
-      .catch(() => {})
+      .catch(() => { setLoaded(true) })
   }, [canvasId])
 
   const scale = size.w / CANVAS_W
@@ -63,12 +68,31 @@ export function CanvasPreview({ canvasId }: Props) {
     }
   }
 
+  const isEmpty = loaded && strokes.length === 0
+
   return (
-    <div ref={containerRef} className="w-full aspect-video border-b-2 border-ink overflow-hidden bg-white">
+    <div ref={containerRef} style={{ width: '100%', aspectRatio: '16/9', overflow: 'hidden', background: 'transparent', position: 'relative' }}>
       {size.w > 0 && (
         <Stage width={size.w} height={size.h} scaleX={scale} scaleY={scale} listening={false}>
           <Layer>{strokes.map(renderStroke)}</Layer>
         </Stage>
+      )}
+      {isEmpty && (
+        <div style={{
+          position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center', gap: 9, paddingTop: 24,
+        }}>
+          <div style={{
+            width: 36, height: 36, borderRadius: 12, background: '#fff',
+            boxShadow: '0 3px 10px rgba(20,23,45,.08)', display: 'flex',
+            alignItems: 'center', justifyContent: 'center',
+          }}>
+            <Icon name="pen" size={17} color={accentColor} />
+          </div>
+          <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--m-ink-3)', letterSpacing: '.01em' }}>
+            Empty canvas
+          </div>
+        </div>
       )}
     </div>
   )

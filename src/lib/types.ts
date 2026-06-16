@@ -1,4 +1,4 @@
-export type ToolType = 'pen' | 'eraser' | 'rect' | 'circle' | 'line' | 'text' | 'hand'
+export type ToolType = 'pen' | 'brush' | 'eraser' | 'rect' | 'circle' | 'line' | 'text' | 'hand'
 
 export interface UserDoc {
   email: string

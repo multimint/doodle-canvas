@@ -45,7 +45,7 @@ export function buildStrokeData(
       globalCompositeOperation: 'destination-out',
     }
   }
-  if (tool === 'pen') {
+  if (tool === 'pen' || tool === 'brush') {
     return { points, stroke: color, strokeWidth }
   }
   if (tool === 'line') {
@@ -94,7 +94,7 @@ export function konvaShapeToStroke(
 ): Omit<Stroke, 'id'> {
   const attrs = shape.attrs as StrokeData
   return {
-    type: (tool === 'pen' ? 'path' : tool) as Stroke['type'],
+    type: (tool === 'pen' || tool === 'brush' ? 'path' : tool) as Stroke['type'],
     authorId,
     data: attrs,
     timestamp: Date.now(),

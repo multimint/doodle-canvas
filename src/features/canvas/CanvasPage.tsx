@@ -15,8 +15,9 @@ import type { LiveStroke } from './hooks/useLiveStrokes'
 import { DrawingStage } from './components/DrawingStage'
 import { Toolbar } from './components/Toolbar'
 import { CursorOverlay } from './components/CursorOverlay'
-import { PresenceBar } from './components/PresenceBar'
 import { InviteModal } from '../sharing/InviteModal'
+import { Icon } from '../../lib/icons'
+import { ConfirmModal } from '../../lib/ConfirmModal'
 import { pickUserColor, STROKE_CAP } from '../../lib/types'
 import type { CanvasDoc, Stroke, ToolType } from '../../lib/types'
 
@@ -33,6 +34,9 @@ export function CanvasPage() {
   const [viewport, setViewport] = useState({ zoom: 1, pan: { x: 0, y: 0 } })
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
+  const [modal, setModal] = useState<{
+    title: string; message: string; confirmLabel: string; danger?: boolean; onConfirm: () => void
+  } | null>(null)
 
   const stageRef = useRef<Konva.Stage>(null)
   const prevToolRef = useRef<ToolType>('pen')
@@ -40,10 +44,9 @@ export function CanvasPage() {
   const spaceActivatedHandRef = useRef(false)
 
   const [tool, setTool] = useState<ToolType>('pen')
-  const [color, setColor] = useState('#000000')
-  const [strokeWidth, setStrokeWidth] = useState(4)
+  const [color, setColor] = useState('#14151c')
+  const [strokeWidth, setStrokeWidth] = useState(6)
 
-  // Keep toolRef current for use in key handlers
   useEffect(() => { toolRef.current = tool }, [tool])
 
   useEffect(() => {
@@ -58,14 +61,11 @@ export function CanvasPage() {
     return unsub
   }, [canvasId, uid, navigate])
 
-  // Re-seed RTDB access entries immediately on canvas load.
-  // Needed after a full RTDB wipe — every read/write rule gates on access/members/{uid}.
   useEffect(() => {
     if (!canvasId) return
     set(ref(rtdb, `canvases/${canvasId}/access/members/${uid}`), true).catch(console.error)
   }, [canvasId, uid])
 
-  // Owner also re-seeds access/ownerId if it was wiped (only writable when absent).
   useEffect(() => {
     if (!canvasId || !canvasDoc || canvasDoc.ownerId !== uid) return
     const ownerRef = ref(rtdb, `canvases/${canvasId}/access/ownerId`)
@@ -82,7 +82,7 @@ export function CanvasPage() {
     photoURL: user!.photoURL ?? '',
     color: userColor,
   })
-  const { push: pushUndo, pop: popUndo } = useUndoStack()
+  const { push, pop: popUndo, pushRedo, popRedo } = useUndoStack()
 
   const handleTitleSave = useCallback(async () => {
     const trimmed = titleDraft.trim()
@@ -98,41 +98,68 @@ export function CanvasPage() {
   const handleGuestSignIn = useCallback(async () => {
     try {
       await linkWithPopup(user!, new GoogleAuthProvider())
-      // Remove the TTL field now that the canvas is permanently owned
       await updateDoc(doc(db, 'canvases', canvasId!), { deleteAt: deleteField() })
     } catch (err) {
       const code = (err as { code?: string })?.code
       if (code === 'auth/credential-already-in-use') {
-        if (!confirm('This Google account already has an account. Your guest canvas will be lost. Sign in anyway?')) return
-        try {
-          await signInWithPopup(auth, new GoogleAuthProvider())
-        } catch {
-          // user closed popup or other error — stay as guest
-        }
+        setModal({
+          title: 'Account already exists',
+          message: 'This Google account already has an account. Your guest canvas will be lost if you sign in.',
+          confirmLabel: 'Sign in anyway',
+          danger: true,
+          onConfirm: async () => {
+            setModal(null)
+            try {
+              await signInWithPopup(auth, new GoogleAuthProvider())
+            } catch { /* stay as guest */ }
+          },
+        })
       }
-      // other errors: stay as guest silently
     }
   }, [canvasId])
+
+  // brush = 2.4× wider pen — applied before passing to DrawingStage
+  const effectiveStrokeWidth = tool === 'brush' ? Math.round(strokeWidth * 2.4) : strokeWidth
 
   const handleStrokeComplete = useCallback(async (stroke: Omit<Stroke, 'id'>) => {
     if (atCap) return
     const strokeId = await addStroke({ ...stroke, authorId: uid })
-    pushUndo(strokeId)
-  }, [atCap, uid, addStroke, pushUndo])
+    push(strokeId)
+  }, [atCap, uid, addStroke, push])
 
   const handleUndo = useCallback(async () => {
     const strokeId = popUndo()
     if (!strokeId) return
+    const stroke = strokes.find(s => s.id === strokeId)
+    if (stroke) {
+      const { id: _id, ...strokeData } = stroke
+      pushRedo(strokeData)
+    }
     try { await deleteStroke(strokeId) } catch { /* already deleted */ }
-  }, [popUndo, deleteStroke])
+  }, [popUndo, deleteStroke, strokes, pushRedo])
+
+  const handleRedo = useCallback(async () => {
+    const stroke = popRedo()
+    if (!stroke) return
+    const strokeId = await addStroke(stroke)
+    push(strokeId)
+  }, [popRedo, addStroke, push])
 
   const handleDeleteStroke = useCallback(async (strokeId: string) => {
     await deleteStroke(strokeId)
   }, [deleteStroke])
 
-  const handleClearCanvas = useCallback(async () => {
-    if (!confirm('Clear all strokes on this canvas? This cannot be undone.')) return
-    await clearAllStrokes()
+  const handleClearCanvas = useCallback(() => {
+    setModal({
+      title: 'Clear canvas?',
+      message: 'All strokes will be permanently erased. This cannot be undone.',
+      confirmLabel: 'Clear all',
+      danger: true,
+      onConfirm: async () => {
+        setModal(null)
+        await clearAllStrokes()
+      },
+    })
   }, [clearAllStrokes])
 
   const handleViewportChange = useCallback((zoom: number, pan: { x: number; y: number }) => {
@@ -148,6 +175,11 @@ export function CanvasPage() {
       e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement
 
     const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'z') {
+        e.preventDefault()
+        handleRedo()
+        return
+      }
       if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
         e.preventDefault()
         handleUndo()
@@ -166,7 +198,6 @@ export function CanvasPage() {
       if (e.code === 'Space' && !isTyping(e)) {
         if (spaceActivatedHandRef.current) {
           spaceActivatedHandRef.current = false
-          // Only restore if the user hasn't manually switched tool while Space was held
           if (toolRef.current === 'hand') {
             setTool(prevToolRef.current)
           }
@@ -179,13 +210,15 @@ export function CanvasPage() {
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)
     }
-  }, [handleUndo])
+  }, [handleUndo, handleRedo])
 
   const displayNames: Record<string, string> = {}
   Object.entries(presence).forEach(([id, entry]) => { displayNames[id] = entry.displayName })
 
+  const presenceEntries = Object.entries(presence)
+
   if (loadingDoc) return (
-    <div className="flex items-center justify-center h-dvh paper-dots">
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100dvh', background: 'var(--m-bg)' }}>
       <div className="spinner" />
     </div>
   )
@@ -194,79 +227,135 @@ export function CanvasPage() {
   const isOwner = canvasDoc.ownerId === uid
 
   return (
-    <div className="flex flex-col h-dvh overflow-hidden">
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', overflow: 'hidden', background: 'var(--m-bg)' }}>
       {/* Topbar */}
-      <div className="flex items-center gap-2 px-4 h-14 bg-white border-b-[3px] border-ink shadow-hard-sm shrink-0">
-        <button
-          className="font-body text-sm px-3 py-1 border-2 border-ink transition-all duration-100 hover:bg-muted shrink-0"
-          style={{ borderRadius: '55px 15px 55px 15px / 15px 55px 15px 55px' }}
-          onClick={() => navigate('/')}
-        >
-          ← Dashboard
-        </button>
-
-        {isOwner && editingTitle ? (
-          <input
-            className="font-hand text-lg text-ink flex-1 text-center bg-transparent border-b-2 border-ink outline-none px-2 min-w-0"
-            value={titleDraft}
-            onChange={(e) => setTitleDraft(e.target.value)}
-            onBlur={handleTitleSave}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleTitleSave()
-              if (e.key === 'Escape') setEditingTitle(false)
-            }}
-            autoFocus
-          />
-        ) : (
-          <span
-            className={`font-hand text-lg text-ink flex-1 text-center truncate px-2 ${isOwner ? 'cursor-pointer hover:opacity-60' : ''}`}
-            onClick={() => { if (!isOwner) return; setTitleDraft(canvasDoc.title); setEditingTitle(true) }}
-            title={isOwner ? 'Click to rename' : undefined}
+      <div
+        className="m-row m-between m-canvas-top"
+        style={{ padding: '11px 18px', borderBottom: '1px solid var(--m-line)', background: 'var(--m-surface)', zIndex: 6, flexShrink: 0 }}
+      >
+        {/* Left: back + title */}
+        <div className="m-row m-g12">
+          <button
+            className="m-btn m-btn-ghost m-btn-sm"
+            onClick={() => navigate('/')}
+            style={{ boxShadow: 'inset 0 0 0 1.5px var(--m-line)' }}
           >
-            {canvasDoc.title}
-          </span>
-        )}
+            <Icon name="back" size={17} />
+            <span className="m-canvas-back-label">Dashboard</span>
+          </button>
 
-        <div className="flex items-center gap-2 shrink-0">
-          <PresenceBar presence={presence} currentUid={uid} />
+          <div className="m-row m-g8">
+            {isOwner && editingTitle ? (
+              <input
+                value={titleDraft}
+                onChange={e => setTitleDraft(e.target.value)}
+                onBlur={handleTitleSave}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') handleTitleSave()
+                  if (e.key === 'Escape') setEditingTitle(false)
+                }}
+                autoFocus
+                style={{
+                  fontFamily: 'var(--disp)', fontWeight: 600, fontSize: 17, color: 'var(--m-ink)',
+                  border: 'none', outline: 'none', background: 'transparent',
+                  borderBottom: '2px solid var(--m-primary)',
+                  minWidth: 80, maxWidth: 260,
+                }}
+              />
+            ) : (
+              <span
+                onClick={() => { if (!isOwner) return; setTitleDraft(canvasDoc.title); setEditingTitle(true) }}
+                title={isOwner ? 'Click to rename' : undefined}
+                style={{
+                  fontFamily: 'var(--disp)', fontWeight: 600, fontSize: 17, color: 'var(--m-ink)',
+                  cursor: isOwner ? 'pointer' : 'default',
+                  maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}
+              >
+                {canvasDoc.title}
+              </span>
+            )}
 
+            {/* Saved chip */}
+            <span
+              className="m-tiny m-faint m-row m-g4"
+              style={{ flexShrink: 0 }}
+            >
+              <Icon name="check" size={14} color="var(--m-green)" />
+              Saved
+            </span>
+          </div>
+        </div>
+
+        {/* Right: collab avatars + undo/redo + share */}
+        <div className="m-row m-g10">
+          {/* Collab avatars */}
+          {presenceEntries.length > 0 && (
+            <div className="m-row m-collab" style={{ marginRight: 2 }}>
+              {presenceEntries.map(([id, entry], i) => (
+                <div
+                  key={id}
+                  className="m-ava"
+                  title={entry.displayName + (id === uid ? ' (you)' : '')}
+                  style={{ width: 28, height: 28, fontSize: 11, marginLeft: i ? -8 : 0, background: entry.color }}
+                >
+                  {entry.displayName.charAt(0).toUpperCase()}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Undo */}
+          <button
+            className="m-tool"
+            onClick={handleUndo}
+            title="Undo (Ctrl+Z)"
+            style={{ width: 40, height: 40 }}
+          >
+            <Icon name="undo" size={19} />
+          </button>
+
+          {/* Redo */}
+          <button
+            className="m-tool"
+            onClick={handleRedo}
+            title="Redo (Ctrl+Shift+Z)"
+            style={{ width: 40, height: 40 }}
+          >
+            <Icon name="redo" size={19} />
+          </button>
+
+          {/* Share */}
           {isOwner && (
             <button
-              className="font-body text-sm px-3 py-1 bg-blue-pen text-white border-[3px] border-ink shadow-hard-sm transition-all duration-100 hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-none"
-              style={{ borderRadius: '255px 15px 225px 15px / 15px 225px 15px 255px' }}
+              className="m-btn m-btn-primary m-btn-sm"
               onClick={() => setShowInvite(true)}
             >
+              <Icon name="share" size={16} color="#fff" />
               Share
             </button>
           )}
-
-          <button
-            className="font-body text-sm px-3 py-1 border-2 border-ink transition-all duration-100 hover:bg-muted"
-            style={{ borderRadius: '55px 15px 55px 15px / 15px 55px 15px 55px' }}
-            onClick={handleUndo}
-            title="Undo (Ctrl+Z)"
-          >
-            ↩ Undo
-          </button>
-
-          <button
-            className="font-body text-sm px-3 py-1 border-2 border-ink text-accent transition-all duration-100 hover:bg-accent hover:text-white"
-            style={{ borderRadius: '55px 15px 55px 15px / 15px 55px 15px 55px' }}
-            onClick={handleClearCanvas}
-          >
-            Clear
-          </button>
         </div>
       </div>
 
       {/* Guest banner */}
       {user!.isAnonymous && (
-        <div className="flex items-center justify-center gap-3 px-4 py-2 bg-blue-pen/10 border-b-2 border-ink/20 shrink-0">
-          <span className="font-body text-sm text-ink/70">Your canvas will be lost in 7 days —</span>
+        <div
+          className="m-row"
+          style={{
+            justifyContent: 'center', gap: 12, padding: '9px 16px',
+            background: 'color-mix(in oklab, var(--m-primary) 8%, transparent)',
+            borderBottom: '1px solid color-mix(in oklab, var(--m-primary) 20%, transparent)',
+            flexShrink: 0,
+          }}
+        >
+          <span style={{ fontSize: 13.5, color: 'var(--m-ink-2)' }}>
+            Your canvas will be deleted in 7 days —
+          </span>
           <button
-            className="font-body text-sm px-3 py-1 bg-blue-pen text-white border-2 border-ink transition-all duration-100 hover:translate-x-[1px] hover:translate-y-[1px]"
-            style={{ borderRadius: '255px 15px 225px 15px / 15px 225px 15px 255px' }}
+            className="m-btn m-btn-primary m-btn-sm"
             onClick={handleGuestSignIn}
+            style={{ padding: '7px 14px' }}
           >
             Sign in with Google to keep it
           </button>
@@ -275,14 +364,25 @@ export function CanvasPage() {
 
       {/* Cap banner */}
       {atCap && (
-        <div className="flex items-center justify-center gap-2 px-4 py-2 bg-accent text-white font-body text-sm shrink-0 border-b-2 border-ink">
+        <div
+          className="m-row"
+          style={{
+            justifyContent: 'center', gap: 8, padding: '9px 16px',
+            background: 'var(--m-coral)', color: '#fff', fontSize: 13.5, flexShrink: 0,
+          }}
+        >
           Canvas is full ({STROKE_CAP} strokes). Double-click any stroke to delete it, or{' '}
-          <button className="underline font-bold" onClick={handleClearCanvas}>clear all</button>.
+          <button
+            onClick={handleClearCanvas}
+            style={{ textDecoration: 'underline', fontWeight: 700, background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}
+          >
+            clear all
+          </button>
         </div>
       )}
 
       {/* Workspace */}
-      <div className="flex flex-1 overflow-hidden">
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         <Toolbar
           tool={tool}
           color={color}
@@ -290,14 +390,15 @@ export function CanvasPage() {
           onToolChange={setTool}
           onColorChange={setColor}
           onStrokeWidthChange={setStrokeWidth}
+          onClear={handleClearCanvas}
         />
 
-        <div className="flex-1 overflow-hidden paper-dots">
+        <div style={{ flex: 1, overflow: 'hidden' }} className="m-canvas-surface">
           <DrawingStage
             strokes={strokes}
             tool={tool}
             color={color}
-            strokeWidth={strokeWidth}
+            strokeWidth={effectiveStrokeWidth}
             disabled={atCap}
             onStrokeComplete={handleStrokeComplete}
             onMouseMove={emitCursor}
@@ -314,6 +415,17 @@ export function CanvasPage() {
 
       {showInvite && (
         <InviteModal canvas={canvasDoc} presenceUids={Object.keys(presence)} onClose={() => setShowInvite(false)} />
+      )}
+
+      {modal && (
+        <ConfirmModal
+          title={modal.title}
+          message={modal.message}
+          confirmLabel={modal.confirmLabel}
+          danger={modal.danger}
+          onConfirm={modal.onConfirm}
+          onCancel={() => setModal(null)}
+        />
       )}
     </div>
   )
