@@ -53,6 +53,7 @@ export function CanvasPage() {
   const [tool, setTool] = useState<ToolType>('pen')
   const [color, setColor] = useState('#14151c')
   const [strokeWidth, setStrokeWidth] = useState(6)
+  const [wiggle, setWiggle] = useState(true)
 
   useEffect(() => { toolRef.current = tool }, [tool])
 
@@ -125,8 +126,7 @@ export function CanvasPage() {
     }
   }, [canvasId])
 
-  // brush = 2.4× wider pen — applied before passing to DrawingStage
-  const effectiveStrokeWidth = tool === 'brush' ? Math.round(strokeWidth * 2.4) : strokeWidth
+  const effectiveStrokeWidth = strokeWidth
 
   const handleStrokeComplete = useCallback(async (stroke: Omit<Stroke, 'id'>) => {
     if (atCap) return
@@ -399,6 +399,8 @@ export function CanvasPage() {
             onColorChange={setColor}
             onStrokeWidthChange={setStrokeWidth}
             onClear={handleClearCanvas}
+            wiggle={wiggle}
+            onWiggleChange={setWiggle}
           />
         )}
 
@@ -418,6 +420,7 @@ export function CanvasPage() {
             overlay={<CursorOverlay cursors={cursors} zoom={viewport.zoom} pan={viewport.pan} displayNames={displayNames} />}
             remoteStrokes={remoteStrokes}
             onLiveUpdate={handleLiveUpdate}
+            wiggle={wiggle}
           />
         </div>
 
@@ -431,6 +434,8 @@ export function CanvasPage() {
             onStrokeWidthChange={setStrokeWidth}
             onClear={handleClearCanvas}
             horizontal
+            wiggle={wiggle}
+            onWiggleChange={setWiggle}
           />
         )}
       </div>

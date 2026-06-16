@@ -1,6 +1,6 @@
 const M_PATHS: Record<string, string> = {
   pen:      '<path d="M4 20l4.6-1.3L19 8.3 15.7 5 5.3 15.4 4 20z"/><path d="M14.5 6.2l3.3 3.3"/>',
-  brush:    '<rect x="4" y="3.5" width="11" height="6.5" rx="2.2"/><path d="M9.5 10v3.5a2.5 2.5 0 0 0 2.5 2.5h.4v4"/>',
+  brush:    '<line x1="18" y1="2" x2="22" y2="6"/><path d="M7.5 20.5L2 22l1.5-5.5L17.5 2.5a2.121 2.121 0 0 1 3 3z"/>',
   line:     '<path d="M5 19L19 5"/>',
   square:   '<rect x="4.5" y="6" width="15" height="12" rx="3"/>',
   circle:   '<circle cx="12" cy="12" r="7.6"/>',
@@ -18,6 +18,7 @@ const M_PATHS: Record<string, string> = {
   users:    '<circle cx="9.2" cy="8.8" r="3.4"/><path d="M3.6 19.2a5.6 5.6 0 0 1 11.2 0"/><path d="M16 6.2a3.1 3.1 0 0 1 0 5.6M17 19.2a4.9 4.9 0 0 0-2.6-4.3"/>',
   clock:    '<circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3 2"/>',
   download: '<path d="M12 4v10M8 10.5l4 4 4-4"/><path d="M5 18.5h14"/>',
+  wiggle:   '<path d="M3 12 Q5.5 7 8 12 Q10.5 17 13 12 Q15.5 7 18 12 Q19.5 15 21 12"/>',
 }
 
 interface IconProps {
