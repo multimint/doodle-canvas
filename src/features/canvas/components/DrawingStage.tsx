@@ -5,6 +5,7 @@ import type { KonvaEventObject } from 'konva/lib/Node'
 import type { Stroke, ToolType } from '../../../lib/types'
 import { buildStrokeData } from '../utils/strokeSerializer'
 import type { LiveStroke } from '../hooks/useLiveStrokes'
+import { useWiggle } from '../hooks/useWiggle'
 
 interface Props {
   strokes: Stroke[]
@@ -21,6 +22,7 @@ interface Props {
   overlay?: React.ReactNode
   remoteStrokes?: Record<string, LiveStroke>
   onLiveUpdate?: (stroke: LiveStroke | null) => void
+  wiggle?: boolean
 }
 
 const CANVAS_WIDTH = 1920
@@ -32,9 +34,12 @@ export function DrawingStage({
   strokes, tool, color, strokeWidth, disabled,
   onStrokeComplete, onMouseMove, onMouseLeave, onDeleteStroke,
   onViewportChange, stageRef, overlay, remoteStrokes, onLiveUpdate,
+  wiggle = true,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [containerSize, setContainerSize] = useState({ w: 0, h: 0 })
+  const layerRef    = useRef<Konva.Layer>(null)
+  const liveLineRef = useRef<Konva.Line>(null)
 
   // Viewport — refs for synchronous access in handlers, state for rendering
   const zoomRef = useRef(1)
@@ -50,9 +55,32 @@ export function DrawingStage({
   const [livePoints, setLivePoints] = useState<number[]>([])
   const [textPrompt, setTextPrompt] = useState<{ x: number; y: number } | null>(null)
 
+  // Pending-commit: keep live line visible until the committed stroke arrives from Firebase
+  const pendingCommitRef = useRef(false)
+  const strokesAtCommitRef = useRef(0)
+  const strokesLenRef = useRef(strokes.length)
+  strokesLenRef.current = strokes.length
+
   // Pan state
   const isPanning = useRef(false)
   const lastClientPos = useRef({ x: 0, y: 0 })
+
+  const { registerStroke, unregisterStroke, registerLive, unregisterLive } =
+    useWiggle(layerRef, wiggle)
+
+  // Stable ref callbacks keyed by stroke ID — prevents unregister/register churn on every re-render
+  const refCacheRef = useRef<Map<string, (node: Konva.Node | null) => void>>(new Map())
+  const getRefCb = useCallback((stroke: Stroke) => {
+    let cb = refCacheRef.current.get(stroke.id)
+    if (!cb) {
+      cb = (node: Konva.Node | null) => {
+        if (node) registerStroke(stroke.id, node, stroke)
+        else { unregisterStroke(stroke.id); refCacheRef.current.delete(stroke.id) }
+      }
+      refCacheRef.current.set(stroke.id, cb)
+    }
+    return cb
+  }, [registerStroke, unregisterStroke])
 
   const applyViewport = useCallback((newZoom: number, newPan: { x: number; y: number }) => {
     zoomRef.current = newZoom
@@ -107,6 +135,7 @@ export function DrawingStage({
       setTextPrompt(getPos())
       return
     }
+    pendingCommitRef.current = false  // new stroke starts — cancel any held live line
     isDrawing.current = true
     const { x, y } = getPos()
     const pts = [x, y, x, y]
@@ -178,9 +207,11 @@ export function DrawingStage({
     const data = buildStrokeData(tool, points, color, strokeWidth)
     onStrokeComplete({ type: rtool as Stroke['type'], authorId: '', data, timestamp: Date.now() })
 
-    livePointsRef.current = []
+    // Keep live line visible until the committed stroke arrives from Firebase.
+    // The useEffect on strokes calls setLivePoints([]) once strokes.length grows.
     liveStartRef.current = null
-    setLivePoints([])
+    pendingCommitRef.current = true
+    strokesAtCommitRef.current = strokesLenRef.current
     onLiveUpdate?.(null)
   }, [tool, color, strokeWidth, onStrokeComplete, onLiveUpdate])
 
@@ -207,7 +238,7 @@ export function DrawingStage({
 
   const renderStroke = (stroke: Stroke) => {
     const { data } = stroke
-    const common = { key: stroke.id, id: stroke.id, listening: true, onDblClick: () => onDeleteStroke(stroke.id) }
+    const common = { key: stroke.id, id: stroke.id, listening: true, onDblClick: () => onDeleteStroke(stroke.id), ref: getRefCb(stroke) }
     switch (stroke.type) {
       case 'path':   return <Line {...common} points={data.points ?? []} stroke={data.stroke} strokeWidth={data.strokeWidth} lineCap="round" lineJoin="round" tension={0.5} />
       case 'eraser': return <Line {...common} points={data.points ?? []} stroke="rgba(0,0,0,1)" strokeWidth={data.strokeWidth} lineCap="round" lineJoin="round" tension={0.5} globalCompositeOperation="destination-out" />
@@ -233,12 +264,33 @@ export function DrawingStage({
     }
   }
 
+  useEffect(() => {
+    const node = liveLineRef.current
+    if (livePoints.length >= 4 && node) {
+      registerLive(node, livePointsRef)
+    } else {
+      unregisterLive()
+    }
+    return () => unregisterLive()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [livePoints.length >= 4])
+
+  // Clear the live line once the Firebase-confirmed stroke arrives so the stroke
+  // is never invisible between mouseup and the committed shape mounting.
+  useEffect(() => {
+    if (pendingCommitRef.current && strokes.length > strokesAtCommitRef.current) {
+      pendingCommitRef.current = false
+      livePointsRef.current = []
+      setLivePoints([])
+    }
+  }, [strokes])
+
   const renderLiveStroke = () => {
     if (livePoints.length < 4) return null
     const [x1, y1, x2, y2] = livePoints
     switch (tool) {
       case 'pen':
-      case 'brush':  return <Line points={livePoints} stroke={color} strokeWidth={strokeWidth} lineCap="round" lineJoin="round" tension={0.5} listening={false} />
+      case 'brush':  return <Line ref={liveLineRef} points={livePoints} stroke={color} strokeWidth={strokeWidth} lineCap="round" lineJoin="round" tension={0.5} listening={false} />
       case 'eraser': return <Line points={livePoints} stroke="rgba(0,0,0,1)" strokeWidth={strokeWidth} lineCap="round" lineJoin="round" tension={0.5} globalCompositeOperation="destination-out" listening={false} />
       case 'rect':   return <Rect x={Math.min(x1,x2)} y={Math.min(y1,y2)} width={Math.abs(x2-x1)} height={Math.abs(y2-y1)} stroke={color} strokeWidth={strokeWidth} fill="transparent" listening={false} />
       case 'circle': return <Ellipse x={(x1+x2)/2} y={(y1+y2)/2} radiusX={Math.abs(x2-x1)/2} radiusY={Math.abs(y2-y1)/2} stroke={color} strokeWidth={strokeWidth} fill="transparent" listening={false} />
@@ -272,7 +324,7 @@ export function DrawingStage({
           onWheel={handleWheel}
           style={{ cursor }}
         >
-          <Layer>
+          <Layer ref={layerRef}>
             {strokes.map(renderStroke)}
             {remoteStrokes && Object.entries(remoteStrokes).map(([uid, s]) => renderRemoteLiveStroke(uid, s))}
             {!disabled && renderLiveStroke()}
