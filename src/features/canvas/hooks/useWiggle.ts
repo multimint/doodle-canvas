@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
-import type Konva from 'konva'
+import Konva from 'konva'
 import type { Stroke } from '../../../lib/types'
+
+// With autoDrawEnabled=true (default), every points()/x()/y() mutation in runFrame
+// calls _requestDraw() → batchDraw() — scheduling async deferred draws that can race
+// our synchronous layer.draw(). Disabling it gives us full, exclusive control: the
+// only repaints are the layer.draw() calls in runFrame and useLayoutEffect below.
+Konva.autoDrawEnabled = false
 
 const AMPLITUDE = 2.5
 const FREQUENCY = 0.0018
@@ -33,10 +39,8 @@ export function useWiggle(
   const enabledRef   = useRef(enabled)
   const lastTRef     = useRef<DOMHighResTimeStamp>(0)
 
-  // Keep enabledRef in sync without restarting the loop
   useEffect(() => { enabledRef.current = enabled }, [enabled])
 
-  // runFrame reads everything from refs — stable, never recreated
   const runFrame = useCallback((t: DOMHighResTimeStamp) => {
     lastTRef.current = t
 
@@ -76,7 +80,6 @@ export function useWiggle(
       }
     }
 
-    // draw() is synchronous — paints immediately rather than deferring via rAF
     layerRef.current?.draw()
   }, [layerRef])
 
@@ -111,12 +114,16 @@ export function useWiggle(
     return () => cancelAnimationFrame(rafRef.current)
   }, [enabled, tick, resetAll])
 
-  // Re-apply wiggle immediately after every React commit so react-konva's
-  // reconciliation (which resets node attrs to original values) never shows
-  // through to the user before our rAF fires. Use performance.now() so the
-  // wiggle phase is always current, not a stale rAF timestamp.
+  // After every React commit: if wiggle is on, re-apply offsets and draw
+  // synchronously so react-konva's attr resets are never visible to the user.
+  // If wiggle is off, still draw so prop changes from reconciliation are visible
+  // (autoDrawEnabled=false means Konva won't do it automatically).
   useLayoutEffect(() => {
-    if (enabledRef.current) runFrame(performance.now())
+    if (enabledRef.current) {
+      runFrame(performance.now())
+    } else {
+      layerRef.current?.draw()
+    }
   })
 
   const registerStroke = useCallback((id: string, node: Konva.Node, stroke: Stroke) => {
