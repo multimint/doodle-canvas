@@ -11,6 +11,8 @@ interface Props {
   onStrokeWidthChange: (w: number) => void
   onClear: () => void
   horizontal?: boolean
+  wiggle?: boolean
+  onWiggleChange?: (v: boolean) => void
 }
 
 const DRAW_TOOLS: { id: ToolType; icon: string; label: string }[] = [
@@ -25,7 +27,7 @@ const DRAW_TOOLS: { id: ToolType; icon: string; label: string }[] = [
 const PALETTE = ['#14151c', '#3d5afe', '#12c2e9', '#15cf7f', '#ffb01f', '#ff5d73', '#ff62b0', '#9b5de5', '#ffffff']
 const SIZES   = [3, 6, 12, 22]
 
-export function Toolbar({ tool, color, strokeWidth, onToolChange, onColorChange, onStrokeWidthChange, onClear, horizontal = false }: Props) {
+export function Toolbar({ tool, color, strokeWidth, onToolChange, onColorChange, onStrokeWidthChange, onClear, horizontal = false, wiggle = true, onWiggleChange }: Props) {
   const [showPicker, setShowPicker] = useState(false)
 
   const colorSwatch = (
@@ -146,6 +148,16 @@ export function Toolbar({ tool, color, strokeWidth, onToolChange, onColorChange,
           <Icon name="eraser" size={19} />
         </button>
 
+        {/* Wiggle toggle */}
+        <button
+          title={wiggle ? 'Wiggle on' : 'Wiggle off'}
+          onClick={() => onWiggleChange?.(!wiggle)}
+          className={'m-tool ' + (wiggle ? 'm-tool-on' : '')}
+          style={{ flexShrink: 0, width: 40, height: 40 }}
+        >
+          <Icon name="wiggle" size={19} />
+        </button>
+
         {/* Divider */}
         <div style={{ width: 1, height: 28, background: 'var(--m-line)', flexShrink: 0, margin: '0 4px' }} />
 
@@ -197,6 +209,16 @@ export function Toolbar({ tool, color, strokeWidth, onToolChange, onColorChange,
         className={'m-tool ' + (tool === 'eraser' ? 'm-tool-on' : '')}
       >
         <Icon name="eraser" size={20} />
+      </button>
+
+      <div style={{ width: 30, height: 1, background: 'var(--m-line)', margin: '6px 0', flexShrink: 0 }} />
+
+      <button
+        title={wiggle ? 'Wiggle on' : 'Wiggle off'}
+        onClick={() => onWiggleChange?.(!wiggle)}
+        className={'m-tool ' + (wiggle ? 'm-tool-on' : '')}
+      >
+        <Icon name="wiggle" size={20} />
       </button>
 
       <div style={{ flex: 1 }} />

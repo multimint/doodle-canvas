@@ -29,3 +29,6 @@ A Session in which the User is identified by a temporary anonymous account rathe
 
 ## Undo Stack
 A per-client, in-memory list of Stroke IDs that the current User has created in this Session. Undo removes the most recent Stroke ID from the stack and deletes that Stroke from the Canvas. The Undo Stack is not persisted.
+
+## Wiggle
+A per-client visual effect that continuously animates every non-eraser Stroke on the Canvas using a sine-wave deformation. `path` and `line` Strokes have each control point perturbed independently; `rect`, `circle`, and `text` Strokes translate as a whole. Wiggle is on by default and toggleable per user as a local preference. It is purely presentational — wiggle offsets are never persisted to Firebase or transmitted to other clients. Snapshots capture the wiggled state.
