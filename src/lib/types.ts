@@ -37,12 +37,13 @@ export interface StrokeData {
   stroke?: string
   strokeWidth?: number
   fill?: string
+  dash?: number[]
   globalCompositeOperation?: string
 }
 
 export interface Stroke {
   id: string
-  type: 'path' | 'rect' | 'circle' | 'line' | 'text' | 'eraser'
+  type: 'path' | 'brush' | 'rect' | 'circle' | 'line' | 'text' | 'eraser'
   authorId: string
   data: StrokeData
   timestamp: number

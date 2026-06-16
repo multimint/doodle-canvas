@@ -172,7 +172,7 @@ export function DrawingStage({
     livePointsRef.current = newPoints
     setLivePoints(newPoints)
 
-    const strokeType = (tool === 'pen' || tool === 'brush' ? 'path' : tool) as Stroke['type']
+    const strokeType = (tool === 'pen' ? 'path' : tool) as Stroke['type']
     onLiveUpdate?.({ type: strokeType, points: newPoints, color, strokeWidth })
   }
 
@@ -203,7 +203,7 @@ export function DrawingStage({
     }
     isDrawing.current = false
 
-    const rtool = (tool === 'pen' || tool === 'brush') ? 'path' : tool
+    const rtool = tool === 'pen' ? 'path' : tool
     const data = buildStrokeData(tool, points, color, strokeWidth)
     onStrokeComplete({ type: rtool as Stroke['type'], authorId: '', data, timestamp: Date.now() })
 
@@ -241,6 +241,7 @@ export function DrawingStage({
     const common = { key: stroke.id, id: stroke.id, listening: true, onDblClick: () => onDeleteStroke(stroke.id), ref: getRefCb(stroke) }
     switch (stroke.type) {
       case 'path':   return <Line {...common} points={data.points ?? []} stroke={data.stroke} strokeWidth={data.strokeWidth} lineCap="round" lineJoin="round" tension={0.5} />
+      case 'brush':  return <Line {...common} points={data.points ?? []} stroke={data.stroke} strokeWidth={data.strokeWidth} lineCap="round" lineJoin="round" tension={0.5} dash={data.dash} />
       case 'eraser': return <Line {...common} points={data.points ?? []} stroke="rgba(0,0,0,1)" strokeWidth={data.strokeWidth} lineCap="round" lineJoin="round" tension={0.5} globalCompositeOperation="destination-out" />
       case 'rect':   return <Rect {...common} x={data.x} y={data.y} width={data.width} height={data.height} stroke={data.stroke} strokeWidth={data.strokeWidth} fill="transparent" />
       case 'circle': return <Ellipse {...common} x={data.x} y={data.y} radiusX={data.radiusX ?? 0} radiusY={data.radiusY ?? 0} stroke={data.stroke} strokeWidth={data.strokeWidth} fill="transparent" />
@@ -256,6 +257,7 @@ export function DrawingStage({
     const k = `live-${uid}`
     switch (s.type) {
       case 'path':   return <Line key={k} points={s.points} stroke={s.color} strokeWidth={s.strokeWidth} lineCap="round" lineJoin="round" tension={0.5} listening={false} />
+      case 'brush':  return <Line key={k} points={s.points} stroke={s.color} strokeWidth={s.strokeWidth} lineCap="round" lineJoin="round" tension={0.5} dash={[s.strokeWidth, s.strokeWidth * 1.5]} listening={false} />
       case 'eraser': return <Line key={k} points={s.points} stroke="rgba(0,0,0,1)" strokeWidth={s.strokeWidth} lineCap="round" lineJoin="round" tension={0.5} globalCompositeOperation="destination-out" listening={false} />
       case 'rect':   return <Rect key={k} x={Math.min(x1,x2)} y={Math.min(y1,y2)} width={Math.abs(x2-x1)} height={Math.abs(y2-y1)} stroke={s.color} strokeWidth={s.strokeWidth} fill="transparent" listening={false} />
       case 'circle': return <Ellipse key={k} x={(x1+x2)/2} y={(y1+y2)/2} radiusX={Math.abs(x2-x1)/2} radiusY={Math.abs(y2-y1)/2} stroke={s.color} strokeWidth={s.strokeWidth} fill="transparent" listening={false} />
@@ -289,8 +291,8 @@ export function DrawingStage({
     if (livePoints.length < 4) return null
     const [x1, y1, x2, y2] = livePoints
     switch (tool) {
-      case 'pen':
-      case 'brush':  return <Line ref={liveLineRef} points={livePoints} stroke={color} strokeWidth={strokeWidth} lineCap="round" lineJoin="round" tension={0.5} listening={false} />
+      case 'pen':    return <Line ref={liveLineRef} points={livePoints} stroke={color} strokeWidth={strokeWidth} lineCap="round" lineJoin="round" tension={0.5} listening={false} />
+      case 'brush':  return <Line ref={liveLineRef} points={livePoints} stroke={color} strokeWidth={strokeWidth} lineCap="round" lineJoin="round" tension={0.5} dash={[strokeWidth, strokeWidth * 1.5]} listening={false} />
       case 'eraser': return <Line points={livePoints} stroke="rgba(0,0,0,1)" strokeWidth={strokeWidth} lineCap="round" lineJoin="round" tension={0.5} globalCompositeOperation="destination-out" listening={false} />
       case 'rect':   return <Rect x={Math.min(x1,x2)} y={Math.min(y1,y2)} width={Math.abs(x2-x1)} height={Math.abs(y2-y1)} stroke={color} strokeWidth={strokeWidth} fill="transparent" listening={false} />
       case 'circle': return <Ellipse x={(x1+x2)/2} y={(y1+y2)/2} radiusX={Math.abs(x2-x1)/2} radiusY={Math.abs(y2-y1)/2} stroke={color} strokeWidth={strokeWidth} fill="transparent" listening={false} />
