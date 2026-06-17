@@ -185,6 +185,17 @@ export function Toolbar({ tool, color, strokeWidth, onToolChange, onColorChange,
         padding: '12px 0', gap: 4, zIndex: 5, position: 'relative', overflow: 'visible',
       }}
     >
+      {/* Hand / pan tool */}
+      <button
+        title="Hand (Space)"
+        onClick={() => { onToolChange('hand'); setShowPicker(false) }}
+        className={'m-tool ' + (tool === 'hand' ? 'm-tool-on' : '')}
+      >
+        <Icon name="hand" size={20} />
+      </button>
+
+      <div style={{ width: 30, height: 1, background: 'var(--m-line)', margin: '2px 0', flexShrink: 0 }} />
+
       {DRAW_TOOLS.map(({ id, icon, label }) => (
         <button
           key={id}

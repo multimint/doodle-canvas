@@ -19,6 +19,10 @@ const M_PATHS: Record<string, string> = {
   clock:    '<circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3 2"/>',
   download: '<path d="M12 4v10M8 10.5l4 4 4-4"/><path d="M5 18.5h14"/>',
   wiggle:   '<path d="M3 12 Q5.5 7 8 12 Q10.5 17 13 12 Q15.5 7 18 12 Q19.5 15 21 12"/>',
+  hand:     '<path d="M7 11.5V5.5a1.5 1.5 0 0 1 3 0v6m0-4.5a1.5 1.5 0 0 1 3 0v4.5m0-3a1.5 1.5 0 0 1 3 0v5.5M7 11.5a1.5 1.5 0 0 0-3 0v3a7 7 0 0 0 14 0v-5.5a1.5 1.5 0 0 0-3 0"/>',
+  minus:    '<path d="M5 12h14"/>',
+  'zoom-in':  '<circle cx="11" cy="11" r="6.3"/><path d="M20 20l-4.2-4.2M8 11h6M11 8v6"/>',
+  'zoom-out': '<circle cx="11" cy="11" r="6.3"/><path d="M20 20l-4.2-4.2M8 11h6"/>',
 }
 
 interface IconProps {

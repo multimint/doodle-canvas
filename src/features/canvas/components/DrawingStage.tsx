@@ -8,6 +8,11 @@ import { buildStrokeData } from '../utils/strokeSerializer'
 import type { LiveStroke } from '../hooks/useLiveStrokes'
 import { useWiggle } from '../hooks/useWiggle'
 
+export interface NavHandle {
+  applyViewport: (zoom: number, pan: { x: number; y: number }) => void
+  getLayer: () => Konva.Layer | null
+}
+
 interface Props {
   strokes: Stroke[]
   tool: ToolType
@@ -20,6 +25,7 @@ interface Props {
   onDeleteStroke: (id: string) => void
   onViewportChange?: (zoom: number, pan: { x: number; y: number }) => void
   stageRef: React.RefObject<Konva.Stage>
+  navRef?: React.MutableRefObject<NavHandle | null>
   overlay?: React.ReactNode
   remoteStrokes?: Record<string, LiveStroke>
   onLiveUpdate?: (stroke: LiveStroke | null) => void
@@ -28,13 +34,13 @@ interface Props {
 
 const CANVAS_WIDTH = 1920
 const CANVAS_HEIGHT = 1080
-const MIN_ZOOM = 0.05
-const MAX_ZOOM = 8
+const MIN_ZOOM = 0.25
+const MAX_ZOOM = 3
 
 export function DrawingStage({
   strokes, tool, color, strokeWidth, disabled,
   onStrokeComplete, onMouseMove, onMouseLeave, onDeleteStroke,
-  onViewportChange, stageRef, overlay, remoteStrokes, onLiveUpdate,
+  onViewportChange, stageRef, navRef, overlay, remoteStrokes, onLiveUpdate,
   wiggle = true,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -66,6 +72,9 @@ export function DrawingStage({
   // Pan state
   const isPanning = useRef(false)
   const lastClientPos = useRef({ x: 0, y: 0 })
+
+  // Two-finger touch state
+  const lastTouchRef = useRef<{ x1: number; y1: number; x2: number; y2: number } | null>(null)
 
   const { registerStroke, unregisterStroke, registerLive, unregisterLive } =
     useWiggle(layerRef, wiggle)
@@ -100,6 +109,13 @@ export function DrawingStage({
     const preventScroll = (e: WheelEvent) => e.preventDefault()
     el.addEventListener('wheel', preventScroll, { passive: false })
 
+    // Prevent browser pinch-zoom / overscroll on two-finger touch
+    const preventTwoFingerScroll = (e: TouchEvent) => {
+      if (e.touches.length >= 2) e.preventDefault()
+    }
+    el.addEventListener('touchstart', preventTwoFingerScroll, { passive: false })
+    el.addEventListener('touchmove', preventTwoFingerScroll, { passive: false })
+
     const ro = new ResizeObserver(() => {
       const { width, height } = el.getBoundingClientRect()
       if (width === 0 || height === 0) return
@@ -107,18 +123,19 @@ export function DrawingStage({
 
       if (!initializedRef.current) {
         initializedRef.current = true
-        const fitZoom = Math.min(width / CANVAS_WIDTH, height / CANVAS_HEIGHT)
-        const fitPan = {
-          x: (width - CANVAS_WIDTH * fitZoom) / 2,
+        const fitZoom = Math.min(1, width / CANVAS_WIDTH, height / CANVAS_HEIGHT)
+        applyViewport(fitZoom, {
+          x: (width  - CANVAS_WIDTH  * fitZoom) / 2,
           y: (height - CANVAS_HEIGHT * fitZoom) / 2,
-        }
-        applyViewport(fitZoom, fitPan)
+        })
       }
     })
     ro.observe(el)
     return () => {
       ro.disconnect()
       el.removeEventListener('wheel', preventScroll)
+      el.removeEventListener('touchstart', preventTwoFingerScroll)
+      el.removeEventListener('touchmove', preventTwoFingerScroll)
     }
   }, [applyViewport])
 
@@ -221,15 +238,76 @@ export function DrawingStage({
     const pointer = stageRef.current?.getPointerPosition()
     if (!pointer) return
 
-    const factor = e.evt.deltaY < 0 ? 1.08 : 1 / 1.08
-    const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoomRef.current * factor))
-    const ratio = newZoom / zoomRef.current
-    const newPan = {
+    const dir     = e.evt.deltaY < 0 ? 1 : -1
+    const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.round((zoomRef.current + dir * 0.1) * 10) / 10))
+    const ratio   = newZoom / zoomRef.current
+    applyViewport(newZoom, {
       x: pointer.x - (pointer.x - panRef.current.x) * ratio,
       y: pointer.y - (pointer.y - panRef.current.y) * ratio,
-    }
-    applyViewport(newZoom, newPan)
+    })
   }
+
+  const handleTouchStart = (e: KonvaEventObject<TouchEvent>) => {
+    if (e.evt.touches.length < 2) return
+    // Cancel any ongoing single-touch stroke
+    if (isDrawing.current) {
+      isDrawing.current = false
+      livePointsRef.current = []
+      liveStartRef.current = null
+      setLivePoints([])
+      onLiveUpdate?.(null)
+    }
+    const t = e.evt.touches
+    lastTouchRef.current = { x1: t[0].clientX, y1: t[0].clientY, x2: t[1].clientX, y2: t[1].clientY }
+  }
+
+  const handleTouchMove = (e: KonvaEventObject<TouchEvent>) => {
+    if (e.evt.touches.length < 2 || !lastTouchRef.current) return
+    const prev = lastTouchRef.current
+    const t = e.evt.touches
+    const cur = { x1: t[0].clientX, y1: t[0].clientY, x2: t[1].clientX, y2: t[1].clientY }
+
+    const prevMidX = (prev.x1 + prev.x2) / 2
+    const prevMidY = (prev.y1 + prev.y2) / 2
+    const curMidX  = (cur.x1  + cur.x2)  / 2
+    const curMidY  = (cur.y1  + cur.y2)  / 2
+    const prevDist = Math.hypot(prev.x2 - prev.x1, prev.y2 - prev.y1)
+    const curDist  = Math.hypot(cur.x2  - cur.x1,  cur.y2  - cur.y1)
+
+    const scale   = prevDist > 1 ? curDist / prevDist : 1
+    const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoomRef.current * scale))
+    const ratio   = newZoom / zoomRef.current
+    applyViewport(newZoom, {
+      x: curMidX - (prevMidX - panRef.current.x) * ratio,
+      y: curMidY - (prevMidY - panRef.current.y) * ratio,
+    })
+    lastTouchRef.current = cur
+  }
+
+  const handleTouchEnd = () => {
+    lastTouchRef.current = null
+    const stage = stageRef.current
+    if (!stage) return
+    const snapped = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.round(zoomRef.current * 10) / 10))
+    if (snapped !== zoomRef.current) {
+      const vpCx = -panRef.current.x / zoomRef.current + stage.width()  / 2
+      const vpCy = -panRef.current.y / zoomRef.current + stage.height() / 2
+      applyViewport(snapped, {
+        x: stage.width()  / 2 - vpCx * snapped,
+        y: stage.height() / 2 - vpCy * snapped,
+      })
+    }
+  }
+
+  // Expose applyViewport + raw layer canvas to parent via navRef (for minimap/zoom controls)
+  useEffect(() => {
+    if (!navRef) return
+    navRef.current = {
+      applyViewport,
+      getLayer: () => layerRef.current,
+    }
+    return () => { navRef.current = null }
+  }, [navRef, applyViewport])
 
   const handleTextSubmit = useCallback((text: string) => {
     if (!textPrompt || !text.trim()) { setTextPrompt(null); return }
@@ -346,6 +424,9 @@ export function DrawingStage({
           onMouseUp={handleMouseUp}
           onMouseLeave={() => { handleMouseUp(); onMouseLeave() }}
           onWheel={handleWheel}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
           style={{ cursor }}
         >
           <Layer ref={layerRef}>

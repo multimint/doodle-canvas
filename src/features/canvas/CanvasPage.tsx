@@ -13,8 +13,12 @@ import { useUndoStack } from './hooks/useUndoStack'
 import { useLiveStrokes } from './hooks/useLiveStrokes'
 import type { LiveStroke } from './hooks/useLiveStrokes'
 import { DrawingStage } from './components/DrawingStage'
+import type { NavHandle } from './components/DrawingStage'
 import { Toolbar } from './components/Toolbar'
 import { CursorOverlay } from './components/CursorOverlay'
+import { Minimap } from './components/Minimap'
+import type { MinimapHandle } from './components/Minimap'
+import { ZoomControls } from './components/ZoomControls'
 import { InviteModal } from '../sharing/InviteModal'
 import { Icon } from '../../lib/icons'
 import { ConfirmModal } from '../../lib/ConfirmModal'
@@ -38,7 +42,9 @@ export function CanvasPage() {
     title: string; message: string; confirmLabel: string; danger?: boolean; onConfirm: () => void
   } | null>(null)
 
-  const stageRef = useRef<Konva.Stage>(null)
+  const stageRef      = useRef<Konva.Stage>(null)
+  const navRef        = useRef<NavHandle | null>(null)
+  const minimapHandle = useRef<MinimapHandle | null>(null)
   const prevToolRef = useRef<ToolType>('pen')
   const toolRef = useRef<ToolType>('pen')
   const spaceActivatedHandRef = useRef(false)
@@ -404,7 +410,7 @@ export function CanvasPage() {
           />
         )}
 
-        <div style={{ flex: 1, overflow: 'hidden' }} className="m-canvas-surface">
+        <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }} className="m-canvas-surface">
           <DrawingStage
             strokes={strokes}
             tool={tool}
@@ -417,11 +423,18 @@ export function CanvasPage() {
             onDeleteStroke={handleDeleteStroke}
             onViewportChange={handleViewportChange}
             stageRef={stageRef}
+            navRef={navRef}
             overlay={<CursorOverlay cursors={cursors} zoom={viewport.zoom} pan={viewport.pan} displayNames={displayNames} />}
             remoteStrokes={remoteStrokes}
             onLiveUpdate={handleLiveUpdate}
             wiggle={wiggle}
           />
+          {!isMobile && (
+            <>
+              <ZoomControls navHandle={navRef} stageRef={stageRef} viewport={viewport} minimapHandle={minimapHandle} />
+              <Minimap navHandle={navRef} stageRef={stageRef} viewport={viewport} strokes={strokes} minimapHandle={minimapHandle} />
+            </>
+          )}
         </div>
 
         {isMobile && (
