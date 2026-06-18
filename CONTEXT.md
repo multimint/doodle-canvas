@@ -4,7 +4,13 @@
 A fixed-size (1920×1080) drawing surface owned by a single **User**. A Canvas has a list of **Members** who may draw on it. A User may own at most 10 Canvases.
 
 ## Stroke
-A single drawing action recorded on a Canvas. A Stroke has a `type` (path, rect, circle, line, text) and carries Konva shape properties as its `data`. A Stroke has exactly one **Author** (the User who created it). Any Member may delete any Stroke.
+A single drawing action recorded on a Canvas. A Stroke has a `type` (path, rect, circle, line, text) and carries Konva shape properties as its `data`. A Stroke has exactly one **Author** (the User who created it). Any Member may delete any Stroke. Strokes are immutable once created, with one exception: the **Text Box**.
+
+## Text Box
+A `text`-type Stroke that holds editable, wrapping text within a fixed **width**. It is the only **mutable** Stroke: in **Select Mode** a Member may move it (drag), resize it (drag any of the 8 selection handles — the font stays fixed and text re-wraps), rotate it (drag the knob above the box; rotation is about the box centre), re-edit its text (double-click), or delete it (select + Delete). It is created by selecting the text tool and dragging a rectangle to set its **width and height** (a plain click yields default dimensions). Text wraps to the width and is centered both horizontally and vertically within the fixed box. Edits and moves are written in place to the same Stroke and propagate to all Members in real time.
+
+## Select Mode
+The idle interaction state in which no drawing tool is active. It is the only mode where **Text Boxes** are interactive (move / re-edit / delete). It is entered by clicking the active tool again to deselect it, and automatically after a Text Box is created. Dragging empty canvas in Select Mode does nothing.
 
 ## Stroke Cap
 The maximum number of Strokes a Canvas may hold (2,000). When the cap is reached, drawing is disabled and Members must clear the Canvas before adding new Strokes. Enforced in both RTDB Security Rules and the client.
@@ -31,4 +37,4 @@ A Session in which the User is identified by a temporary anonymous account rathe
 A per-client, in-memory list of Stroke IDs that the current User has created in this Session. Undo removes the most recent Stroke ID from the stack and deletes that Stroke from the Canvas. The Undo Stack is not persisted.
 
 ## Wiggle
-A per-client visual effect that continuously animates every non-eraser Stroke on the Canvas using a sine-wave deformation. `path` and `line` Strokes have each control point perturbed independently; `rect`, `circle`, and `text` Strokes translate as a whole. Wiggle is on by default and toggleable per user as a local preference. It is purely presentational — wiggle offsets are never persisted to Firebase or transmitted to other clients. Snapshots capture the wiggled state.
+A per-client visual effect that animates Strokes on the Canvas. Currently only `brush` Strokes animate (their spray jitter advances each frame); all other Stroke types are static. Wiggle is on by default and toggleable per user as a local preference. It is purely presentational — wiggle offsets are never persisted to Firebase or transmitted to other clients. Snapshots capture the rendered state.

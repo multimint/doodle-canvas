@@ -356,6 +356,29 @@
   box-shadow: var(--m-shadow);
 }
 
+/* Text Box editor — anchored at the box top-left, matches Konva <Text> layout */
+.text-tool-textarea {
+  position: absolute;
+  margin: 0;
+  padding: 0;
+  /* No border here. The dashed outline is drawn on the canvas by the same Konva
+     code as the selection box (DrawingStage), so it matches exactly — colour,
+     1.5px width, dash [6 4] and zoom scaling. The textarea is transparent so
+     that canvas outline shows through around its edge. */
+  border: none;
+  outline: none;
+  border-radius: 0;
+  background: transparent;
+  font-family: sans-serif;
+  line-height: 1;
+  text-align: center;
+  resize: none;
+  overflow: hidden;
+  white-space: pre-wrap;
+  word-break: break-word;
+  box-sizing: border-box;
+}
+
 /* Loading spinner */
 @keyframes spin { to { transform: rotate(360deg); } }
 

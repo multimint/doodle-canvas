@@ -1,4 +1,4 @@
-export type ToolType = 'pen' | 'brush' | 'eraser' | 'rect' | 'circle' | 'line' | 'text' | 'hand'
+export type ToolType = 'pen' | 'brush' | 'eraser' | 'rect' | 'circle' | 'line' | 'text' | 'hand' | 'select'
 
 export interface UserDoc {
   email: string
@@ -34,6 +34,7 @@ export interface StrokeData {
   radiusY?: number
   text?: string
   fontSize?: number
+  rotation?: number
   stroke?: string
   strokeWidth?: number
   fill?: string

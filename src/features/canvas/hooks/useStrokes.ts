@@ -1,8 +1,8 @@
 import { useEffect, useCallback, useRef, useState } from 'react'
-import { ref, onValue, push, remove, off } from 'firebase/database'
+import { ref, onValue, push, remove, off, update } from 'firebase/database'
 import { rtdb } from '../../../lib/firebase'
 import { STROKE_CAP } from '../../../lib/types'
-import type { Stroke } from '../../../lib/types'
+import type { Stroke, StrokeData } from '../../../lib/types'
 
 export function useStrokes(canvasId: string) {
   const [strokes, setStrokes] = useState<Stroke[]>([])
@@ -25,7 +25,22 @@ export function useStrokes(canvasId: string) {
         seen.add(id)
         const existing = cacheRef.current.get(id)
         if (existing) {
-          result.push(existing)
+          // Text Boxes are mutable (move/edit) — bust the cache when their data
+          // actually changed so the update renders. Other strokes are immutable,
+          // so reuse the cached object (preserves the wiggle node optimization).
+          if (existing.type === 'text') {
+            const next = child.val() as Omit<Stroke, 'id'>
+            const a = existing.data, b = next.data
+            if (a.x !== b.x || a.y !== b.y || a.width !== b.width || a.height !== b.height || a.rotation !== b.rotation || a.text !== b.text) {
+              const updated = { id, ...next } as Stroke
+              cacheRef.current.set(id, updated)
+              result.push(updated)
+            } else {
+              result.push(existing)
+            }
+          } else {
+            result.push(existing)
+          }
         } else {
           const stroke = { id, ...child.val() } as Stroke
           cacheRef.current.set(id, stroke)
@@ -50,6 +65,10 @@ export function useStrokes(canvasId: string) {
     return newRef.key!
   }, [basePath])
 
+  const updateStroke = useCallback(async (strokeId: string, patch: Partial<StrokeData>) => {
+    await update(ref(rtdb, `${basePath}/${strokeId}/data`), patch)
+  }, [basePath])
+
   const deleteStroke = useCallback(async (strokeId: string) => {
     await remove(ref(rtdb, `${basePath}/${strokeId}`))
   }, [basePath])
@@ -58,5 +77,5 @@ export function useStrokes(canvasId: string) {
     await remove(ref(rtdb, basePath))
   }, [basePath])
 
-  return { strokes, strokesLoaded, atCap, addStroke, deleteStroke, clearAllStrokes }
+  return { strokes, strokesLoaded, atCap, addStroke, updateStroke, deleteStroke, clearAllStrokes }
 }

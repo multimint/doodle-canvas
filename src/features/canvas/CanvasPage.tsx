@@ -86,7 +86,7 @@ export function CanvasPage() {
     get(ownerRef).then(snap => { if (!snap.exists()) return set(ownerRef, uid) }).catch(console.error)
   }, [canvasId, canvasDoc?.ownerId, uid])
 
-  const { strokes, atCap, addStroke, deleteStroke, clearAllStrokes } = useStrokes(canvasId!)
+  const { strokes, atCap, addStroke, updateStroke, deleteStroke, clearAllStrokes } = useStrokes(canvasId!)
   const { cursors, emitCursor, clearCursor } = useCursors(canvasId!, uid, userColor)
   const { remoteStrokes, emitLiveStroke, clearLiveStroke } = useLiveStrokes(canvasId!, uid)
   const { presence } = usePresence({
@@ -421,6 +421,8 @@ export function CanvasPage() {
             onMouseMove={emitCursor}
             onMouseLeave={clearCursor}
             onDeleteStroke={handleDeleteStroke}
+            onUpdateStroke={updateStroke}
+            onToolChange={setTool}
             onViewportChange={handleViewportChange}
             stageRef={stageRef}
             navRef={navRef}

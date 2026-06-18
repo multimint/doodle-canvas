@@ -127,7 +127,7 @@ export function Toolbar({ tool, color, strokeWidth, onToolChange, onColorChange,
           <button
             key={id}
             title={label}
-            onClick={() => { onToolChange(id); setShowPicker(false) }}
+            onClick={() => { onToolChange(tool === id ? 'select' : id); setShowPicker(false) }}
             className={'m-tool ' + (tool === id ? 'm-tool-on' : '')}
             style={{ flexShrink: 0, width: 40, height: 40 }}
           >
@@ -141,7 +141,7 @@ export function Toolbar({ tool, color, strokeWidth, onToolChange, onColorChange,
         {/* Eraser */}
         <button
           title="Eraser"
-          onClick={() => { onToolChange('eraser'); setShowPicker(false) }}
+          onClick={() => { onToolChange(tool === 'eraser' ? 'select' : 'eraser'); setShowPicker(false) }}
           className={'m-tool ' + (tool === 'eraser' ? 'm-tool-on' : '')}
           style={{ flexShrink: 0, width: 40, height: 40 }}
         >
@@ -200,7 +200,7 @@ export function Toolbar({ tool, color, strokeWidth, onToolChange, onColorChange,
         <button
           key={id}
           title={label}
-          onClick={() => { onToolChange(id); setShowPicker(false) }}
+          onClick={() => { onToolChange(tool === id ? 'select' : id); setShowPicker(false) }}
           className={'m-tool ' + (tool === id ? 'm-tool-on' : '')}
         >
           <Icon name={icon} size={20} />
@@ -216,7 +216,7 @@ export function Toolbar({ tool, color, strokeWidth, onToolChange, onColorChange,
 
       <button
         title="Eraser"
-        onClick={() => { onToolChange('eraser'); setShowPicker(false) }}
+        onClick={() => { onToolChange(tool === 'eraser' ? 'select' : 'eraser'); setShowPicker(false) }}
         className={'m-tool ' + (tool === 'eraser' ? 'm-tool-on' : '')}
       >
         <Icon name="eraser" size={20} />

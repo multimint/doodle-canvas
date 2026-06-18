@@ -1,6 +1,9 @@
 import type Konva from 'konva'
 import type { Stroke, StrokeData, ToolType } from '../../../lib/types'
 
+export const MIN_TEXT_WIDTH = 200
+export const MIN_TEXT_HEIGHT = 80
+
 export function strokeToKonvaProps(stroke: Stroke): Record<string, unknown> {
   const base: Record<string, unknown> = {
     id: stroke.id,
@@ -77,9 +80,14 @@ export function buildStrokeData(
     }
   }
   if (tool === 'text') {
+    const [x, y, x2, y2] = points
+    const width = Math.max(MIN_TEXT_WIDTH, Math.abs((x2 ?? x) - x))
+    const height = Math.max(MIN_TEXT_HEIGHT, Math.abs((y2 ?? y) - y))
     return {
-      x: points[0],
-      y: points[1],
+      x: Math.min(x, x2 ?? x),
+      y: Math.min(y, y2 ?? y),
+      width,
+      height,
       text: extra?.text ?? '',
       fontSize: strokeWidth * 4 + 8,
       stroke: color,
