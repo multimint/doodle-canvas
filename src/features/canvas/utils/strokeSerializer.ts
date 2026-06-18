@@ -1,37 +1,7 @@
-import type Konva from 'konva'
-import type { Stroke, StrokeData, ToolType } from '../../../lib/types'
+import type { StrokeData, ToolType } from '../../../lib/types'
 
 export const MIN_TEXT_WIDTH = 200
 export const MIN_TEXT_HEIGHT = 80
-
-export function strokeToKonvaProps(stroke: Stroke): Record<string, unknown> {
-  const base: Record<string, unknown> = {
-    id: stroke.id,
-    listening: false,
-    ...stroke.data,
-  }
-
-  switch (stroke.type) {
-    case 'path':
-    case 'eraser':
-      return {
-        ...base,
-        lineCap: 'round',
-        lineJoin: 'round',
-        tension: 0.5,
-      }
-    case 'rect':
-      return { ...base, fill: 'transparent' }
-    case 'circle':
-      return { ...base, fill: 'transparent' }
-    case 'line':
-      return { ...base, lineCap: 'round' }
-    case 'text':
-      return { ...base, fontFamily: 'sans-serif' }
-    default:
-      return base
-  }
-}
 
 export function buildStrokeData(
   tool: ToolType,
@@ -96,18 +66,4 @@ export function buildStrokeData(
     }
   }
   return {}
-}
-
-export function konvaShapeToStroke(
-  shape: Konva.Shape,
-  tool: ToolType,
-  authorId: string,
-): Omit<Stroke, 'id'> {
-  const attrs = shape.attrs as StrokeData
-  return {
-    type: (tool === 'pen' ? 'path' : tool) as Stroke['type'],
-    authorId,
-    data: attrs,
-    timestamp: Date.now(),
-  }
 }

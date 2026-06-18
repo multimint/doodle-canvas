@@ -5,18 +5,8 @@ import {
   useEffect,
   useLayoutEffect,
 } from 'react';
-import {
-  Stage,
-  Layer,
-  Line,
-  Rect,
-  Ellipse,
-  Text,
-  Shape,
-  Group,
-} from 'react-konva';
+import { Stage, Layer, Line, Rect, Text, Group } from 'react-konva';
 import type Konva from 'konva';
-import { generateSprayPoints, brushSceneFunc } from '../utils/sprayUtils';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import type { Stroke, StrokeData, ToolType } from '../../../lib/types';
 import {
@@ -34,6 +24,12 @@ import {
   type AABB,
   type RotBox,
 } from '../utils/textBoxGeometry';
+import {
+  renderShape,
+  descriptorFromStroke,
+  descriptorFromLive,
+  type SimpleStrokeType,
+} from '../render/strokeShapes';
 import type { LiveStroke } from '../hooks/useLiveStrokes';
 import { useWiggle } from '../hooks/useWiggle';
 
@@ -264,8 +260,8 @@ export function DrawingStage({
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ w: 0, h: 0 });
   const layerRef = useRef<Konva.Layer>(null);
-  const liveLineRef = useRef<Konva.Line>(null);
-  const liveShapeRef = useRef<Konva.Shape>(null);
+  const liveLineRef = useRef<Konva.Line | null>(null);
+  const liveShapeRef = useRef<Konva.Shape | null>(null);
 
   // Viewport — refs for synchronous access in handlers, state for rendering
   const zoomRef = useRef(1);
@@ -394,6 +390,15 @@ export function DrawingStage({
     },
     [registerStroke, unregisterStroke],
   );
+
+  // Stable callback refs so renderShape can hand the live nodes to the wiggle
+  // registration effect without re-attaching the ref on every render.
+  const liveLineCb = useCallback((node: Konva.Node | null) => {
+    liveLineRef.current = node as Konva.Line | null;
+  }, []);
+  const liveShapeCb = useCallback((node: Konva.Node | null) => {
+    liveShapeRef.current = node as Konva.Shape | null;
+  }, []);
 
   const applyViewport = useCallback(
     (newZoom: number, newPan: { x: number; y: number }) => {
@@ -950,91 +955,7 @@ export function DrawingStage({
 
   const renderStroke = (stroke: Stroke) => {
     const { data } = stroke;
-    const common = {
-      key: stroke.id,
-      id: stroke.id,
-      listening: true,
-      onDblClick: () => onDeleteStroke(stroke.id),
-      ref: getRefCb(stroke),
-    };
     switch (stroke.type) {
-      case 'path':
-        return (
-          <Line
-            {...common}
-            points={data.points ?? []}
-            stroke={data.stroke}
-            strokeWidth={data.strokeWidth}
-            lineCap='round'
-            lineJoin='round'
-            tension={0.5}
-          />
-        );
-      case 'brush': {
-        const sprayPoints = generateSprayPoints(
-          data.points ?? [],
-          data.strokeWidth ?? 6,
-        );
-        const dotSize = Math.max(1, Math.floor((data.strokeWidth ?? 6) / 6));
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        return (
-          <Shape
-            {...common}
-            fill={data.stroke}
-            sceneFunc={brushSceneFunc}
-            {...({ sprayPoints, dotSize, animT: 0 } as any)}
-          />
-        );
-      }
-      case 'eraser':
-        return (
-          <Line
-            {...common}
-            points={data.points ?? []}
-            stroke='rgba(0,0,0,1)'
-            strokeWidth={data.strokeWidth}
-            lineCap='round'
-            lineJoin='round'
-            tension={0.5}
-            globalCompositeOperation='destination-out'
-          />
-        );
-      case 'rect':
-        return (
-          <Rect
-            {...common}
-            x={data.x}
-            y={data.y}
-            width={data.width}
-            height={data.height}
-            stroke={data.stroke}
-            strokeWidth={data.strokeWidth}
-            fill='transparent'
-          />
-        );
-      case 'circle':
-        return (
-          <Ellipse
-            {...common}
-            x={data.x}
-            y={data.y}
-            radiusX={data.radiusX ?? 0}
-            radiusY={data.radiusY ?? 0}
-            stroke={data.stroke}
-            strokeWidth={data.strokeWidth}
-            fill='transparent'
-          />
-        );
-      case 'line':
-        return (
-          <Line
-            {...common}
-            points={data.points ?? []}
-            stroke={data.stroke}
-            strokeWidth={data.strokeWidth}
-            lineCap='round'
-          />
-        );
       case 'text': {
         const isActive = active?.id === stroke.id;
         // Single geometry source: `active` (this box being created/selected/edited)
@@ -1156,98 +1077,27 @@ export function DrawingStage({
         );
       }
       default:
-        return null;
+        return renderShape(
+          stroke.type as SimpleStrokeType,
+          descriptorFromStroke(data),
+          {
+            key: stroke.id,
+            id: stroke.id,
+            listening: true,
+            ref: getRefCb(stroke),
+            onDblClick: () => onDeleteStroke(stroke.id),
+          },
+        );
     }
   };
 
+  // Another client's in-progress stroke (text never streams, so it can't appear here).
   const renderRemoteLiveStroke = (uid: string, s: LiveStroke) => {
-    if (s.points.length < 4) return null;
-    const [x1, y1, x2, y2] = s.points;
-    const k = `live-${uid}`;
-    switch (s.type) {
-      case 'path':
-        return (
-          <Line
-            key={k}
-            points={s.points}
-            stroke={s.color}
-            strokeWidth={s.strokeWidth}
-            lineCap='round'
-            lineJoin='round'
-            tension={0.5}
-            listening={false}
-          />
-        );
-      case 'brush': {
-        const sprayPoints = generateSprayPoints(s.points, s.strokeWidth);
-        const dotSize = Math.max(1, Math.floor(s.strokeWidth / 6));
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        return (
-          <Shape
-            key={k}
-            fill={s.color}
-            sceneFunc={brushSceneFunc}
-            listening={false}
-            {...({ sprayPoints, dotSize, animT: 0 } as any)}
-          />
-        );
-      }
-      case 'eraser':
-        return (
-          <Line
-            key={k}
-            points={s.points}
-            stroke='rgba(0,0,0,1)'
-            strokeWidth={s.strokeWidth}
-            lineCap='round'
-            lineJoin='round'
-            tension={0.5}
-            globalCompositeOperation='destination-out'
-            listening={false}
-          />
-        );
-      case 'rect':
-        return (
-          <Rect
-            key={k}
-            x={Math.min(x1, x2)}
-            y={Math.min(y1, y2)}
-            width={Math.abs(x2 - x1)}
-            height={Math.abs(y2 - y1)}
-            stroke={s.color}
-            strokeWidth={s.strokeWidth}
-            fill='transparent'
-            listening={false}
-          />
-        );
-      case 'circle':
-        return (
-          <Ellipse
-            key={k}
-            x={(x1 + x2) / 2}
-            y={(y1 + y2) / 2}
-            radiusX={Math.abs(x2 - x1) / 2}
-            radiusY={Math.abs(y2 - y1) / 2}
-            stroke={s.color}
-            strokeWidth={s.strokeWidth}
-            fill='transparent'
-            listening={false}
-          />
-        );
-      case 'line':
-        return (
-          <Line
-            key={k}
-            points={[x1, y1, x2, y2]}
-            stroke={s.color}
-            strokeWidth={s.strokeWidth}
-            lineCap='round'
-            listening={false}
-          />
-        );
-      default:
-        return null;
-    }
+    if (s.points.length < 4 || s.type === 'text') return null;
+    return renderShape(s.type as SimpleStrokeType, descriptorFromLive(s), {
+      key: `live-${uid}`,
+      listening: false,
+    });
   };
 
   useEffect(() => {
@@ -1279,103 +1129,51 @@ export function DrawingStage({
     }
   }, [strokes]);
 
+  // This client's in-progress stroke. Text shows a dashed sizing rectangle; the
+  // drawable tools route through the same shape registry as committed strokes, with
+  // the live nodes wired to the wiggle registration via stable callback refs.
   const renderLiveStroke = () => {
     if (livePoints.length < 4) return null;
-    const [x1, y1, x2, y2] = livePoints;
-    switch (tool) {
-      case 'pen':
-        return (
-          <Line
-            ref={liveLineRef}
-            points={livePoints}
-            stroke={color}
-            strokeWidth={strokeWidth}
-            lineCap='round'
-            lineJoin='round'
-            tension={0.5}
-            listening={false}
-          />
-        );
-      case 'brush': {
-        const sprayPoints = generateSprayPoints(livePoints, strokeWidth);
-        const dotSize = Math.max(1, Math.floor(strokeWidth / 6));
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        return (
-          <Shape
-            ref={liveShapeRef}
-            fill={color}
-            sceneFunc={brushSceneFunc}
-            listening={false}
-            {...({ sprayPoints, dotSize, animT: 0 } as any)}
-          />
-        );
-      }
-      case 'eraser':
-        return (
-          <Line
-            points={livePoints}
-            stroke='rgba(0,0,0,1)'
-            strokeWidth={strokeWidth}
-            lineCap='round'
-            lineJoin='round'
-            tension={0.5}
-            globalCompositeOperation='destination-out'
-            listening={false}
-          />
-        );
-      case 'rect':
-        return (
-          <Rect
-            x={Math.min(x1, x2)}
-            y={Math.min(y1, y2)}
-            width={Math.abs(x2 - x1)}
-            height={Math.abs(y2 - y1)}
-            stroke={color}
-            strokeWidth={strokeWidth}
-            fill='transparent'
-            listening={false}
-          />
-        );
-      case 'circle':
-        return (
-          <Ellipse
-            x={(x1 + x2) / 2}
-            y={(y1 + y2) / 2}
-            radiusX={Math.abs(x2 - x1) / 2}
-            radiusY={Math.abs(y2 - y1) / 2}
-            stroke={color}
-            strokeWidth={strokeWidth}
-            fill='transparent'
-            listening={false}
-          />
-        );
-      case 'line':
-        return (
-          <Line
-            points={livePoints}
-            stroke={color}
-            strokeWidth={strokeWidth}
-            lineCap='round'
-            listening={false}
-          />
-        );
-      case 'text':
-        return (
-          <Rect
-            x={Math.min(x1, x2)}
-            y={Math.min(y1, y2)}
-            width={Math.abs(x2 - x1)}
-            height={Math.abs(y2 - y1)}
-            stroke={color}
-            strokeWidth={1 / zoom}
-            dash={[6 / zoom, 4 / zoom]}
-            fill='transparent'
-            listening={false}
-          />
-        );
-      default:
-        return null;
+    if (tool === 'text') {
+      const [x1, y1, x2, y2] = livePoints;
+      return (
+        <Rect
+          x={Math.min(x1, x2)}
+          y={Math.min(y1, y2)}
+          width={Math.abs(x2 - x1)}
+          height={Math.abs(y2 - y1)}
+          stroke={color}
+          strokeWidth={1 / zoom}
+          dash={[6 / zoom, 4 / zoom]}
+          fill='transparent'
+          listening={false}
+        />
+      );
     }
+    if (
+      tool !== 'pen' &&
+      tool !== 'brush' &&
+      tool !== 'eraser' &&
+      tool !== 'rect' &&
+      tool !== 'circle' &&
+      tool !== 'line'
+    ) {
+      return null; // hand / select don't draw
+    }
+    const type: SimpleStrokeType = tool === 'pen' ? 'path' : tool;
+    return renderShape(
+      type,
+      descriptorFromLive({ type, points: livePoints, color, strokeWidth }),
+      {
+        listening: false,
+        ref:
+          tool === 'brush'
+            ? liveShapeCb
+            : tool === 'pen'
+              ? liveLineCb
+              : undefined,
+      },
+    );
   };
 
   const cursor =
