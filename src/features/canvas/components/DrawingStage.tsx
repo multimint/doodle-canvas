@@ -1,5 +1,5 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
-import { Stage, Layer, Line, Rect, Text, Group } from 'react-konva';
+import { Stage, Layer, Line, Rect, Group } from 'react-konva';
 import type Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import type { Stroke, StrokeData, ToolType } from '../../../lib/types';
@@ -23,8 +23,9 @@ import {
   descriptorFromLive,
   type SimpleStrokeType,
 } from '../render/strokeShapes';
-import { BoxControls } from './BoxControls';
+import { TextBoxNode } from './TextBoxNode';
 import { TextBoxEditor } from './TextBoxEditor';
+import type { ActiveBox, XformBox } from './textBoxTypes';
 import { useViewport } from '../hooks/useViewport';
 import type { LiveStroke } from '../hooks/useLiveStrokes';
 import { useWiggle } from '../hooks/useWiggle';
@@ -93,30 +94,11 @@ export function DrawingStage({
   //   editing === true       -> textarea open (Konva text for this id is hidden)
   //   editing === false      -> just selected (Konva text visible, handles shown)
   // x/y/width/height are the UNROTATED top-left frame; rotation in degrees.
-  const [active, setActive] = useState<{
-    id: string | null;
-    editing: boolean;
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    rotation: number;
-    fontSize: number;
-    color: string;
-    strokeWidth: number;
-    initial: string;
-  } | null>(null);
+  const [active, setActive] = useState<ActiveBox | null>(null);
   // Transient geometry while resizing a box in a MULTI-selection — overrides the
   // box's stored geometry so it reflows live. Cleared once the persisted stroke
   // catches up (see reconcile effect below). Single-box transforms write `active`.
-  const [xform, setXform] = useState<{
-    id: string;
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    rotation: number;
-  } | null>(null);
+  const [xform, setXform] = useState<XformBox | null>(null);
   // Box captured at the start of a handle drag — fixed frame for stable math.
   const handleStartRef = useRef<{
     x: number;
@@ -631,141 +613,38 @@ export function DrawingStage({
   }, [active, multiIds, onDeleteStroke]);
 
   const renderStroke = (stroke: Stroke) => {
-    const { data } = stroke;
-    switch (stroke.type) {
-      case 'text': {
-        const isActive = active?.id === stroke.id;
-        // Single geometry source: `active` (this box being created/selected/edited)
-        // overrides while it owns the box, else `xform` (multi-select live resize),
-        // else the persisted `data`.
-        const geo = isActive ? active! : xform?.id === stroke.id ? xform : data;
-        // Legacy text strokes (pre-Text-Box feature) have no width/height; fall back
-        // to the minimums so they still render as a sized box instead of collapsing.
-        const w = geo.width ?? MIN_TEXT_WIDTH,
-          h = geo.height ?? MIN_TEXT_HEIGHT;
-        const rot = geo.rotation ?? 0;
-        // In a group selection, follow the live group-drag offset; the group box
-        // owns the drag, so the node itself isn't individually draggable.
-        const inMulti = multiIds.includes(stroke.id);
-        const off = inMulti && multiOffset ? multiOffset : { dx: 0, dy: 0 };
-        const gx = (geo.x ?? 0) + off.dx,
-          gy = (geo.y ?? 0) + off.dy;
-        // While this box is being edited, hide the Konva text and let the textarea
-        // render it, so the caret sits on the very text it's editing. (A DOM caret
-        // can't be aligned to a separately canvas-drawn glyph.)
-        const editingThis = isActive && active!.editing;
-        const movable = tool === 'select' && !inMulti && !editingThis;
-        // The box is a draggable Group at the box centre (rotated). Its <Text> and —
-        // when active — its border/handles are CHILDREN, so a move drags them together
-        // with no React-state lag between text and border. Resize/rotate handles are
-        // draggable children, so grabbing one drags it, not the group.
-        return (
-          <Group
-            key={stroke.id}
-            x={gx + w / 2}
-            y={gy + h / 2}
-            offsetX={w / 2}
-            offsetY={h / 2}
-            rotation={rot}
-            draggable={movable}
-            onClick={() => {
-              if (tool === 'select') selectStroke(stroke);
-            }}
-            onTap={() => {
-              if (tool === 'select') selectStroke(stroke);
-            }}
-            onDblClick={() => {
-              if (tool === 'select') openEditExisting(stroke);
-            }}
-            onDblTap={() => {
-              if (tool === 'select') openEditExisting(stroke);
-            }}
-            onDragStart={(e) => {
-              // Konva drag events bubble: dragging a child handle (rotate knob / resize
-              // handle) fires this too, with e.target as the handle. Only treat it as a
-              // box move when the Group itself is the drag target.
-              if (e.target !== e.currentTarget) return;
-              if (!isActive) selectStroke(stroke);
-            }}
-            onDragMove={(e) => {
-              if (e.target !== e.currentTarget) return;
-              const nx = e.target.x() - w / 2,
-                ny = e.target.y() - h / 2;
-              setActive((prev) =>
-                prev && prev.id === stroke.id
-                  ? { ...prev, x: nx, y: ny }
-                  : prev,
-              );
-            }}
-            onDragEnd={(e) => {
-              if (e.target !== e.currentTarget) return;
-              const nx = e.target.x() - w / 2,
-                ny = e.target.y() - h / 2;
-              onUpdateStroke?.(stroke.id, { x: nx, y: ny });
-              setActive((prev) =>
-                prev && prev.id === stroke.id
-                  ? { ...prev, x: nx, y: ny }
-                  : prev,
-              );
-            }}
-          >
-            <Text
-              id={stroke.id}
-              ref={getRefCb(stroke)}
-              listening
-              x={0}
-              y={0}
-              text={data.text}
-              fontSize={data.fontSize}
-              fill={data.fill ?? data.stroke}
-              fontFamily='sans-serif'
-              width={w}
-              height={h}
-              wrap='word'
-              align='center'
-              verticalAlign='middle'
-              visible={!editingThis}
-            />
-            {isActive && (
-              <BoxControls
-                w={w}
-                h={h}
-                zoom={zoom}
-                editing={active!.editing}
-                stageRef={stageRef}
-                handleStartRef={handleStartRef}
-                geom={active!}
-                onChange={(p) =>
-                  setActive((prev) => (prev ? { ...prev, ...p } : prev))
-                }
-                onCommit={() => {
-                  if (active!.id)
-                    onUpdateStroke?.(active!.id, {
-                      x: active!.x,
-                      y: active!.y,
-                      width: active!.width,
-                      height: active!.height,
-                      rotation: active!.rotation,
-                    });
-                }}
-              />
-            )}
-          </Group>
-        );
-      }
-      default:
-        return renderShape(
-          stroke.type as SimpleStrokeType,
-          descriptorFromStroke(data),
-          {
-            key: stroke.id,
-            id: stroke.id,
-            listening: true,
-            ref: getRefCb(stroke),
-            onDblClick: () => onDeleteStroke(stroke.id),
-          },
-        );
+    if (stroke.type === 'text') {
+      return (
+        <TextBoxNode
+          key={stroke.id}
+          stroke={stroke}
+          tool={tool}
+          zoom={zoom}
+          active={active}
+          xform={xform}
+          multiIds={multiIds}
+          multiOffset={multiOffset}
+          stageRef={stageRef}
+          handleStartRef={handleStartRef}
+          getRefCb={getRefCb}
+          setActive={setActive}
+          selectStroke={selectStroke}
+          openEditExisting={openEditExisting}
+          onUpdateStroke={onUpdateStroke}
+        />
+      );
     }
+    return renderShape(
+      stroke.type as SimpleStrokeType,
+      descriptorFromStroke(stroke.data),
+      {
+        key: stroke.id,
+        id: stroke.id,
+        listening: true,
+        ref: getRefCb(stroke),
+        onDblClick: () => onDeleteStroke(stroke.id),
+      },
+    );
   };
 
   // Another client's in-progress stroke (text never streams, so it can't appear here).
