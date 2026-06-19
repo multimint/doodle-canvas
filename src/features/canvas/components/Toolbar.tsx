@@ -188,7 +188,7 @@ export function Toolbar({ tool, color, strokeWidth, onToolChange, onColorChange,
       {/* Hand / pan tool */}
       <button
         title="Hand (Space)"
-        onClick={() => { onToolChange('hand'); setShowPicker(false) }}
+        onClick={() => { onToolChange(tool === 'hand' ? 'select' : 'hand'); setShowPicker(false) }}
         className={'m-tool ' + (tool === 'hand' ? 'm-tool-on' : '')}
       >
         <Icon name="hand" size={20} />
