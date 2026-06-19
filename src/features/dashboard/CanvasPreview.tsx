@@ -3,6 +3,7 @@ import { ref, get } from 'firebase/database'
 import { Stage, Layer, Line, Rect, Ellipse, Text } from 'react-konva'
 import { rtdb } from '../../lib/firebase'
 import { Icon } from '../../lib/icons'
+import { DOODLE_FONT } from '../../lib/fonts'
 import type { Stroke } from '../../lib/types'
 
 const CANVAS_W = 1920
@@ -62,7 +63,7 @@ export function CanvasPreview({ canvasId, accentColor = '#3d5afe' }: Props) {
       case 'line':
         return <Line key={k} points={data.points ?? []} stroke={data.stroke} strokeWidth={data.strokeWidth} lineCap="round" listening={false} />
       case 'text':
-        return <Text key={k} x={data.x} y={data.y} text={data.text} fontSize={data.fontSize} fill={data.stroke} fontFamily="sans-serif" listening={false} />
+        return <Text key={k} x={data.x} y={data.y} text={data.text} fontSize={data.fontSize} fill={data.stroke} fontFamily={DOODLE_FONT} listening={false} />
       default:
         return null
     }

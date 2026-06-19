@@ -96,11 +96,16 @@ export function BoxControls({
           if (c) c.style.cursor = 'grab'
         }}
         onMouseLeave={(e) => {
+          // While rotating, the pointer orbits away from the knob and fires mouseleave —
+          // keep the grabbing cursor until the drag ends instead of snapping to default.
+          if (e.target.isDragging()) return
           const c = e.target.getStage()?.container()
           if (c) c.style.cursor = 'default'
         }}
-        onDragStart={() => {
+        onDragStart={(e) => {
           handleStartRef.current = st0
+          const c = e.target.getStage()?.container()
+          if (c) c.style.cursor = 'grabbing'
         }}
         onDragMove={(e) => {
           const st = handleStartRef.current
@@ -112,7 +117,11 @@ export function BoxControls({
           onChange({ rotation: ang })
           e.target.position({ x: st.width / 2 - hs / 2, y: -rotGap - hs / 2 })
         }}
-        onDragEnd={onCommit}
+        onDragEnd={(e) => {
+          onCommit()
+          const c = e.target.getStage()?.container()
+          if (c) c.style.cursor = 'default'
+        }}
       />
       {/* 8 resize handles, math done in the box's fixed start frame */}
       {RESIZE_HANDLES.map(({ role, cursor: hCursor }) => {

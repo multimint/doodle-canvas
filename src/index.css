@@ -400,7 +400,9 @@
   outline: none;
   border-radius: 0;
   background: transparent;
-  font-family: sans-serif;
+  /* Match the on-canvas Konva Text font (DOODLE_FONT) so the editor caret sits on the
+     same glyphs and wrapping/centering don't jump on commit. */
+  font-family: var(--disp);
   line-height: 1;
   text-align: center;
   resize: none;

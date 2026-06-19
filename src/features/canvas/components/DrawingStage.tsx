@@ -646,6 +646,21 @@ export function DrawingStage({
     setCursorVisible(false);
   }, [tool]);
 
+  // Konva measures/caches text with whatever font is available at draw time. If a Text
+  // Box mounts before the doodle font (Patrick Hand) has loaded it renders in the
+  // fallback and stays there until something redraws — so force one redraw once fonts
+  // are ready to recompute its wrapping/metrics in the real font.
+  useEffect(() => {
+    if (typeof document === 'undefined' || !document.fonts?.ready) return;
+    let cancelled = false;
+    document.fonts.ready.then(() => {
+      if (!cancelled) layerRef.current?.batchDraw();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Drop the transient transform once the persisted stroke matches it — avoids
   // reverting to the old geometry for a frame before the RTDB write lands.
   useEffect(() => {

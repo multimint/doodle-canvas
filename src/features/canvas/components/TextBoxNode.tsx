@@ -2,6 +2,7 @@ import { Text, Group } from 'react-konva'
 import type Konva from 'konva'
 import type { Stroke, StrokeData, ToolType } from '../../../lib/types'
 import { MIN_TEXT_WIDTH, MIN_TEXT_HEIGHT } from '../utils/strokeSerializer'
+import { DOODLE_FONT } from '../../../lib/fonts'
 import type { RotBox } from '../utils/textBoxGeometry'
 import { BoxControls } from './BoxControls'
 import type { ActiveBox, XformBox } from './textBoxTypes'
@@ -123,7 +124,7 @@ export function TextBoxNode({
         text={displayText}
         fontSize={data.fontSize}
         fill={fillColor}
-        fontFamily='sans-serif'
+        fontFamily={DOODLE_FONT}
         width={w}
         height={h}
         wrap='word'
