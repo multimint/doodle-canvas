@@ -340,6 +340,37 @@
   white-space: nowrap;
 }
 
+/* Size/area-aware tool cursor (ToolCursor.tsx). The root is moved imperatively via
+   `transform: translate(...)`; its inner visual centres on that point so the pointer maps
+   to the true centre of the painted footprint. */
+.tool-cursor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 6;
+  will-change: transform;
+}
+
+.tool-cursor > span {
+  position: absolute;
+  display: block;
+  transform: translate(-50%, -50%);
+}
+
+/* Pen / brush: solid dot in the tool colour, sized to the stroke. */
+.tool-cursor-dot {
+  border-radius: 50%;
+  box-shadow: 0 0 0 1.5px #fff, 0 0 3px rgba(0, 0, 0, 0.45);
+}
+
+/* Eraser: hollow ring (dark inner + white halo) so it reads on any background. */
+.tool-cursor-ring {
+  border-radius: 50%;
+  border: 1.5px solid rgba(0, 0, 0, 0.65);
+  box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.9);
+}
+
 /* Text tool input floats over Konva stage */
 .text-tool-input {
   position: absolute;

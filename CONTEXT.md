@@ -24,6 +24,9 @@ The User who created a Canvas. The Owner may invite others by email to become Me
 ## Pending Invite
 An email address recorded on a Canvas that has not yet been claimed. When a User logs in for the first time and their email matches a Pending Invite, they are promoted to Member automatically.
 
+## Tool Cursor
+A local, presentational follower that depicts the active drawing tool's painted footprint at the pointer: pen and brush show a filled dot in the current colour sized to the stroke, the eraser shows a hollow ring of that size, and the line/rectangle/circle tools show a precise crosshair with a small colour dot. It is shown only for fine pointers (mouse/trackpad) — never on touch — and never while drawing is disabled by the Stroke Cap. Unlike **Presence** cursors it is never persisted or shared with other Members; it exists only in the current client's view.
+
 ## Presence
 The real-time record of which Users are currently active on a Canvas, including their cursor position, display name, and avatar. Presence is ephemeral — it is removed when the user disconnects.
 

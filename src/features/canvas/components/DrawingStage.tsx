@@ -27,6 +27,8 @@ import { TextBoxEditor } from './TextBoxEditor';
 import type { ActiveBox, XformBox } from './textBoxTypes';
 import { useViewport } from '../hooks/useViewport';
 import { cursorForTool } from '../utils/cursorForTool';
+import { usesToolCursor } from '../utils/toolCursor';
+import { ToolCursor } from './ToolCursor';
 import type { LiveStroke } from '../hooks/useLiveStrokes';
 import { useWiggle } from '../hooks/useWiggle';
 
@@ -47,6 +49,7 @@ interface Props {
   onDeleteStroke: (id: string) => void;
   onUpdateStroke?: (id: string, patch: Partial<StrokeData>) => void;
   onToolChange?: (tool: ToolType) => void;
+  onResizeStroke?: (dir: 1 | -1) => void;
   onViewportChange?: (zoom: number, pan: { x: number; y: number }) => void;
   stageRef: React.RefObject<Konva.Stage>;
   navRef?: React.MutableRefObject<NavHandle | null>;
@@ -68,6 +71,7 @@ export function DrawingStage({
   onDeleteStroke,
   onUpdateStroke,
   onToolChange,
+  onResizeStroke,
   onViewportChange,
   stageRef,
   navRef,
@@ -80,6 +84,18 @@ export function DrawingStage({
   const layerRef = useRef<Konva.Layer>(null);
   const liveLineRef = useRef<Konva.Line | null>(null);
   const liveShapeRef = useRef<Konva.Shape | null>(null);
+
+  // Size/area-aware follower cursor. Positioned imperatively (see handleMouseMove) so it
+  // tracks the pointer without re-rendering. Only shown for fine pointers (mouse); touch
+  // has no hover, so a follower would stick at the last touch point.
+  const toolCursorRef = useRef<HTMLDivElement>(null);
+  const [cursorVisible, setCursorVisible] = useState(false);
+  const [isFinePointer] = useState(
+    () =>
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(pointer: fine)').matches,
+  );
 
   // Drawing state
   const isDrawing = useRef(false);
@@ -217,7 +233,33 @@ export function DrawingStage({
   const getPos = () =>
     stageRef.current?.getRelativePointerPosition() ?? { x: 0, y: 0 };
 
+  // Right-click drops the active tool back to Select (idle) so a tool can be dismissed
+  // without reaching for the toolbar. Always suppress the browser context menu over the
+  // canvas; when already idle there's nothing to deselect.
+  const handleContextMenu = (e: KonvaEventObject<MouseEvent>) => {
+    e.evt.preventDefault();
+    if (tool !== 'select') {
+      cancelStroke(); // abandon any in-progress stroke started by the press
+      onToolChange?.('select');
+    }
+  };
+
+  // The wheel zooms only when panning/idle (hand or select). With a drawing tool active it
+  // resizes the stroke instead — scroll up = bigger, down = smaller.
+  const handleWheelOrResize = (e: KonvaEventObject<WheelEvent>) => {
+    if (tool === 'hand' || tool === 'select') {
+      handleWheel(e);
+      return;
+    }
+    e.evt.preventDefault();
+    onResizeStroke?.(e.evt.deltaY < 0 ? 1 : -1);
+  };
+
   const handleMouseDown = (e: KonvaEventObject<MouseEvent>) => {
+    // Only the left button draws/selects/pans. Right (and middle) clicks must have no
+    // side effect here — right-click is handled by onContextMenu, which just cancels the
+    // active tool. Without this guard a right-press starts a pen stroke or text box.
+    if (e.evt.button !== 0) return;
     if (tool === 'hand') {
       isPanning.current = true;
       if (containerRef.current) containerRef.current.style.cursor = 'grabbing';
@@ -279,6 +321,17 @@ export function DrawingStage({
 
     const { x, y } = getPos();
     onMouseMove(x, y);
+
+    // Follow the pointer with the tool-footprint cursor. Write the screen-space position
+    // straight to the node (same x*zoom+pan transform CursorOverlay uses) so hovering and
+    // drawing both update it without a React re-render; reveal it on the first move.
+    if (isFinePointer && !disabled && usesToolCursor(tool)) {
+      const el = toolCursorRef.current;
+      if (el) {
+        el.style.transform = `translate(${x * zoom + pan.x}px, ${y * zoom + pan.y}px)`;
+        if (!cursorVisible) setCursorVisible(true);
+      }
+    }
 
     if (isMarquee.current && marqueeRef.current) {
       marqueeRef.current = { ...marqueeRef.current, x1: x, y1: y };
@@ -587,6 +640,12 @@ export function DrawingStage({
     setMultiOffset(null);
   }, [tool]);
 
+  // Hide the follower across tool changes so it never flashes at the stage origin before
+  // the first mousemove repositions it. The next move over the canvas reveals it again.
+  useEffect(() => {
+    setCursorVisible(false);
+  }, [tool]);
+
   // Drop the transient transform once the persisted stroke matches it — avoids
   // reverting to the old geometry for a frame before the RTDB write lands.
   useEffect(() => {
@@ -750,7 +809,13 @@ export function DrawingStage({
     );
   };
 
-  const cursor = cursorForTool(tool, disabled);
+  // Hide the native cursor only while the follower is actually on screen, so they never
+  // double up — and, crucially, so the pointer isn't left invisible in the gap between a
+  // tool change (which hides the follower) and the next mousemove that re-reveals it. In
+  // that gap the normal native cursor shows.
+  const showToolCursor = isFinePointer && !disabled && usesToolCursor(tool);
+  const cursor =
+    showToolCursor && cursorVisible ? 'none' : cursorForTool(tool, disabled);
 
   return (
     <div
@@ -770,11 +835,13 @@ export function DrawingStage({
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
+          onContextMenu={handleContextMenu}
           onMouseLeave={() => {
             handleMouseUp();
             onMouseLeave();
+            setCursorVisible(false); // don't freeze the follower at the canvas edge
           }}
-          onWheel={handleWheel}
+          onWheel={handleWheelOrResize}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
@@ -882,6 +949,17 @@ export function DrawingStage({
           selectAllOnFocus={active.id === null}
           onCommit={handleEditingCommit}
           onCancel={() => setActive(null)}
+        />
+      )}
+
+      {showToolCursor && (
+        <ToolCursor
+          ref={toolCursorRef}
+          tool={tool}
+          color={color}
+          strokeWidth={strokeWidth}
+          zoom={zoom}
+          visible={cursorVisible}
         />
       )}
 

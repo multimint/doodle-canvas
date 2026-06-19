@@ -13,6 +13,7 @@ import { useUndoStack } from './hooks/useUndoStack'
 import { useLiveStrokes } from './hooks/useLiveStrokes'
 import type { LiveStroke } from './hooks/useLiveStrokes'
 import { DrawingStage } from './components/DrawingStage'
+import { stepStrokeWidth } from './utils/strokeSize'
 import type { NavHandle } from './components/DrawingStage'
 import { CanvasTopBar } from './components/CanvasTopBar'
 import { useCanvasKeyboard } from './hooks/useCanvasKeyboard'
@@ -58,7 +59,7 @@ export function CanvasPage() {
   const [tool, setTool] = useState<ToolType>('pen')
   const [color, setColor] = useState('#14151c')
   const [strokeWidth, setStrokeWidth] = useState(6)
-  const [wiggle, setWiggle] = useState(true)
+  const [wiggle] = useState(true)
 
   useEffect(() => { toolRef.current = tool }, [tool])
 
@@ -131,7 +132,17 @@ export function CanvasPage() {
     }
   }, [canvasId])
 
-  const effectiveStrokeWidth = strokeWidth
+  // The eraser clears a noticeably larger area than the pens/shapes draw — 4x the chosen
+  // size. This flows to both the committed eraser stroke and its follower cursor ring.
+  const ERASER_SCALE = 4
+  const effectiveStrokeWidth =
+    tool === 'eraser' ? strokeWidth * ERASER_SCALE : strokeWidth
+
+  // Mouse-wheel resize from DrawingStage: step the base size (never the eraser-scaled
+  // value) so the eraser keeps its 4x footprint relative to the chosen size.
+  const handleResizeStroke = useCallback((dir: 1 | -1) => {
+    setStrokeWidth((w) => stepStrokeWidth(w, dir))
+  }, [])
 
   const handleStrokeComplete = useCallback(async (stroke: Omit<Stroke, 'id'>) => {
     if (atCap) return
@@ -271,8 +282,6 @@ export function CanvasPage() {
             onColorChange={setColor}
             onStrokeWidthChange={setStrokeWidth}
             onClear={handleClearCanvas}
-            wiggle={wiggle}
-            onWiggleChange={setWiggle}
           />
         )}
 
@@ -289,6 +298,7 @@ export function CanvasPage() {
             onDeleteStroke={handleDeleteStroke}
             onUpdateStroke={updateStroke}
             onToolChange={setTool}
+            onResizeStroke={handleResizeStroke}
             onViewportChange={handleViewportChange}
             stageRef={stageRef}
             navRef={navRef}
@@ -315,8 +325,6 @@ export function CanvasPage() {
             onStrokeWidthChange={setStrokeWidth}
             onClear={handleClearCanvas}
             horizontal
-            wiggle={wiggle}
-            onWiggleChange={setWiggle}
           />
         )}
       </div>
