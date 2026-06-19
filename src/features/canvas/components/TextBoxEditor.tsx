@@ -18,6 +18,9 @@ interface TextBoxEditorProps {
   rotation: number
   color: string
   initial: string
+  // New boxes pre-fill "Text" and select it all so the first keystroke replaces it;
+  // editing an existing box keeps the caret at the end instead.
+  selectAllOnFocus?: boolean
   onCommit: (text: string) => void
   onCancel: () => void
 }
@@ -34,6 +37,7 @@ export function TextBoxEditor({
   rotation,
   color,
   initial,
+  selectAllOnFocus,
   onCommit,
   onCancel,
 }: TextBoxEditorProps) {
@@ -77,7 +81,8 @@ export function TextBoxEditor({
     const el = ref.current
     if (!el) return
     el.focus()
-    el.setSelectionRange(el.value.length, el.value.length)
+    if (selectAllOnFocus) el.select()
+    else el.setSelectionRange(el.value.length, el.value.length)
     recenter()
   }, [])
 

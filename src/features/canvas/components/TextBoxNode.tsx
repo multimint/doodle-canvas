@@ -63,6 +63,11 @@ export function TextBoxNode({
   // so the caret sits on the very text it's editing.
   const editingThis = isActive && active!.editing
   const movable = tool === 'select' && !inMulti && !editingThis
+  // An empty box renders a faint "Text" placeholder: it keeps the box visible and gives
+  // the <Text> a hit area, so an emptied box stays selectable instead of vanishing.
+  const isEmpty = !data.text
+  const displayText = isEmpty ? 'Text' : data.text
+  const fillColor = isEmpty ? '#b8b8b8' : (data.fill ?? data.stroke)
   return (
     <Group
       key={stroke.id}
@@ -115,9 +120,9 @@ export function TextBoxNode({
         listening
         x={0}
         y={0}
-        text={data.text}
+        text={displayText}
         fontSize={data.fontSize}
-        fill={data.fill ?? data.stroke}
+        fill={fillColor}
         fontFamily='sans-serif'
         width={w}
         height={h}

@@ -419,7 +419,7 @@ export function DrawingStage({
         fontSize: strokeWidth * 4 + 8,
         color,
         strokeWidth,
-        initial: '',
+        initial: 'Text', // pre-fill + select so a plain click drops a ready "Text" box
       });
       return;
     }
@@ -510,7 +510,10 @@ export function DrawingStage({
         // Commit fully exits to idle (no selection box / handles).
         setActive(null);
       } else {
-        onDeleteStroke(active.id);
+        // Empty text: keep the box and save the empty string (don't delete). TextBoxNode
+        // renders a faint placeholder for empty boxes so they stay visible and selectable
+        // — a bare empty Konva <Text> draws nothing and has no hit area, i.e. would be lost.
+        onUpdateStroke?.(active.id, { text: '' });
         setActive(null);
       }
     },
@@ -876,6 +879,7 @@ export function DrawingStage({
           rotation={active.rotation}
           color={active.color}
           initial={active.initial}
+          selectAllOnFocus={active.id === null}
           onCommit={handleEditingCommit}
           onCancel={() => setActive(null)}
         />
