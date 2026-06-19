@@ -1,17 +1,6 @@
-import { useState, useEffect, useRef } from 'react'
-import {
-  doc, getDoc, runTransaction, collection, query, where, getDocs,
-  arrayUnion, updateDoc, arrayRemove,
-} from 'firebase/firestore'
-import { ref, set, remove } from 'firebase/database'
-import { db, rtdb } from '../../lib/firebase'
 import type { CanvasDoc } from '../../lib/types'
-
-interface MemberInfo {
-  displayName: string
-  email: string
-  photoURL: string
-}
+import { useCanvasInvites } from './useCanvasInvites'
+import { MemberList } from './MemberList'
 
 interface Props {
   canvas: CanvasDoc
@@ -20,132 +9,8 @@ interface Props {
 }
 
 export function InviteModal({ canvas, onClose, presenceUids = [] }: Props) {
-  const [email, setEmail] = useState('')
-  const [status, setStatus] = useState<'idle' | 'sending' | 'done' | 'error'>('idle')
-  const [message, setMessage] = useState('')
-  const [memberInfo, setMemberInfo] = useState<Record<string, MemberInfo>>({})
-  const fetchGenRef = useRef(0)
-
-  const membersJson = JSON.stringify(canvas.members)
-  useEffect(() => {
-    const members: string[] = JSON.parse(membersJson)
-    if (members.length === 0) { setMemberInfo({}); return }
-    const gen = ++fetchGenRef.current
-    const load = async () => {
-      const results: Record<string, MemberInfo> = {}
-      await Promise.all(members.map(async (uid) => {
-        try {
-          const snap = await getDoc(doc(db, 'users', uid))
-          if (snap.exists()) {
-            const d = snap.data()
-            results[uid] = {
-              displayName: d.displayName ?? uid,
-              email: d.email ?? '',
-              photoURL: d.photoURL ?? '',
-            }
-          } else {
-            results[uid] = { displayName: uid, email: '', photoURL: '' }
-          }
-        } catch {
-          results[uid] = { displayName: uid, email: '', photoURL: '' }
-        }
-      }))
-      if (gen === fetchGenRef.current) setMemberInfo(results)
-    }
-    load()
-  }, [membersJson])
-
-  const handleInvite = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const trimmed = email.trim().toLowerCase()
-    if (!trimmed) return
-
-    setStatus('sending')
-    try {
-      const canvasRef = doc(db, 'canvases', canvas.id)
-
-      const usersSnap = await getDocs(query(
-        collection(db, 'users'),
-        where('email', '==', trimmed),
-      ))
-      const existingUser = usersSnap.empty ? null : usersSnap.docs[0]
-
-      let addedUid: string | null = null
-      let msg = ''
-
-      await runTransaction(db, async (tx) => {
-        const fresh = await tx.get(canvasRef)
-        if (!fresh.exists()) throw new Error('not-found')
-        const data = fresh.data()
-        const members: string[] = data.members ?? []
-        const pendingInvites: string[] = data.pendingInvites ?? []
-
-        if (members.length + pendingInvites.length >= 20) {
-          throw Object.assign(new Error('cap'), { code: 'cap' })
-        }
-
-        if (existingUser) {
-          const uid = existingUser.id
-          if (members.includes(uid)) {
-            throw Object.assign(new Error('already-member'), { code: 'already-member' })
-          }
-          tx.update(canvasRef, { members: arrayUnion(uid) })
-          addedUid = uid
-          msg = `${trimmed} added as collaborator.`
-        } else {
-          if (pendingInvites.includes(trimmed)) {
-            throw Object.assign(new Error('already-pending'), { code: 'already-pending' })
-          }
-          tx.update(canvasRef, { pendingInvites: arrayUnion(trimmed) })
-          msg = `Invite sent to ${trimmed}. They'll get access on first login.`
-        }
-      })
-
-      if (addedUid) {
-        await set(ref(rtdb, `canvases/${canvas.id}/access/members/${addedUid}`), true)
-      }
-
-      setMessage(msg)
-      setStatus('done')
-      setEmail('')
-    } catch (err: unknown) {
-      const code = (err as { code?: string }).code
-      if (code === 'cap') {
-        setMessage('This canvas already has the maximum number of collaborators.')
-      } else if (code === 'already-member') {
-        setMessage('This user is already a collaborator.')
-      } else if (code === 'already-pending') {
-        setMessage('Invite already sent to this email.')
-      } else {
-        setMessage('Failed to send invite. Please try again.')
-      }
-      setStatus('error')
-    }
-  }
-
-  const handleRemoveMember = async (uid: string) => {
-    try {
-      await updateDoc(doc(db, 'canvases', canvas.id), { members: arrayRemove(uid) })
-    } catch {
-      setMessage('Failed to remove member.')
-      setStatus('error')
-      return
-    }
-    // Firestore is source of truth — member is already kicked via onSnapshot.
-    // Best-effort RTDB cleanup; log if it fails so it can be investigated.
-    remove(ref(rtdb, `canvases/${canvas.id}/access/members/${uid}`)).catch(err => {
-      console.error('[InviteModal] RTDB member access cleanup failed for', uid, err)
-    })
-  }
-
-  const handleCancelInvite = async (inviteEmail: string) => {
-    try {
-      await updateDoc(doc(db, 'canvases', canvas.id), { pendingInvites: arrayRemove(inviteEmail) })
-    } catch {
-      setMessage('Failed to cancel invite.')
-      setStatus('error')
-    }
-  }
+  const { email, setEmail, status, message, memberInfo, invite, removeMember, cancelInvite } =
+    useCanvasInvites(canvas)
 
   return (
     <div
@@ -173,7 +38,7 @@ export function InviteModal({ canvas, onClose, presenceUids = [] }: Props) {
           </button>
         </div>
 
-        <form onSubmit={handleInvite} className="flex gap-2 mb-3">
+        <form onSubmit={invite} className="flex gap-2 mb-3">
           <input
             type="email"
             value={email}
@@ -201,92 +66,14 @@ export function InviteModal({ canvas, onClose, presenceUids = [] }: Props) {
           </p>
         )}
 
-        {(canvas.members.length > 0 || canvas.pendingInvites.length > 0) && (
-          <div className="mt-5 border-t-2 border-dashed border-ink/20 pt-4 flex flex-col gap-4 max-h-64 overflow-y-auto">
-            {canvas.members.length > 0 && (
-              <div>
-                <p className="font-hand text-xs text-ink/40 uppercase tracking-wider mb-2">
-                  Members ({canvas.members.length})
-                </p>
-                {canvas.members.length > 0 && Object.keys(memberInfo).length === 0 && (
-                  <p className="font-body text-xs text-ink/30 italic">Loading…</p>
-                )}
-                <ul className="flex flex-col gap-2">
-                  {canvas.members.map((uid) => {
-                    const info = memberInfo[uid]
-                    return (
-                      <li key={uid} className="flex items-center gap-2">
-                        <div className="relative shrink-0">
-                          <div className="w-7 h-7 rounded-full border-2 border-ink overflow-hidden bg-muted flex items-center justify-center">
-                            {info?.photoURL ? (
-                              <img src={info.photoURL} alt={info.displayName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                            ) : (
-                              <span className="font-hand text-xs text-ink">
-                                {info?.displayName?.[0]?.toUpperCase() ?? '?'}
-                              </span>
-                            )}
-                          </div>
-                          {presenceUids.includes(uid) && (
-                            <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-green-500 border-2 border-white" />
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-body text-sm text-ink truncate">
-                            {info?.displayName ?? uid}
-                          </p>
-                          {info?.email && (
-                            <p className="font-body text-xs text-ink/40 truncate">{info.email}</p>
-                          )}
-                        </div>
-                        <button
-                          className="shrink-0 font-body text-xs text-ink/30 hover:text-accent transition-colors px-1.5 py-0.5 border border-ink/20 hover:border-accent"
-                          style={{ borderRadius: '4px 8px 4px 8px / 8px 4px 8px 4px' }}
-                          onClick={() => handleRemoveMember(uid)}
-                          title="Remove member"
-                        >
-                          ✕
-                        </button>
-                      </li>
-                    )
-                  })}
-                </ul>
-              </div>
-            )}
-            {canvas.pendingInvites.length > 0 && (
-              <div>
-                <p className="font-hand text-xs text-ink/40 uppercase tracking-wider mb-2">
-                  Pending ({canvas.pendingInvites.length})
-                </p>
-                <ul className="flex flex-col gap-2">
-                  {canvas.pendingInvites.map((inviteEmail) => (
-                    <li key={inviteEmail} className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full border-2 border-dashed border-ink/30 flex items-center justify-center shrink-0">
-                        <span className="font-body text-xs text-ink/30">?</span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-body text-sm text-ink/60 truncate">{inviteEmail}</p>
-                        <span
-                          className="font-body text-[10px] px-1.5 py-0.5 bg-muted border border-ink/20 text-ink/40"
-                          style={{ borderRadius: '4px 8px 4px 8px / 8px 4px 8px 4px' }}
-                        >
-                          pending
-                        </span>
-                      </div>
-                      <button
-                        className="shrink-0 font-body text-xs text-ink/30 hover:text-accent transition-colors px-1.5 py-0.5 border border-ink/20 hover:border-accent"
-                        style={{ borderRadius: '4px 8px 4px 8px / 8px 4px 8px 4px' }}
-                        onClick={() => handleCancelInvite(inviteEmail)}
-                        title="Cancel invite"
-                      >
-                        ✕
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        )}
+        <MemberList
+          members={canvas.members}
+          pendingInvites={canvas.pendingInvites}
+          memberInfo={memberInfo}
+          presenceUids={presenceUids}
+          onRemoveMember={removeMember}
+          onCancelInvite={cancelInvite}
+        />
       </div>
     </div>
   )
