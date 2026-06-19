@@ -26,6 +26,7 @@ import { MultiSelectOverlay } from './MultiSelectOverlay';
 import { TextBoxEditor } from './TextBoxEditor';
 import type { ActiveBox, XformBox } from './textBoxTypes';
 import { useViewport } from '../hooks/useViewport';
+import { cursorForTool } from '../utils/cursorForTool';
 import type { LiveStroke } from '../hooks/useLiveStrokes';
 import { useWiggle } from '../hooks/useWiggle';
 
@@ -731,18 +732,7 @@ export function DrawingStage({
     );
   };
 
-  const cursor =
-    tool === 'hand'
-      ? 'grab'
-      : tool === 'select'
-        ? 'default'
-        : disabled
-          ? 'not-allowed'
-          : tool === 'eraser'
-            ? 'cell'
-            : tool === 'text'
-              ? 'text'
-              : 'crosshair';
+  const cursor = cursorForTool(tool, disabled);
 
   return (
     <div
