@@ -28,7 +28,10 @@ export interface ShapeDescriptor {
 }
 
 // Adapter 1: a committed Stroke's stored data already holds final geometry.
-export function descriptorFromStroke(data: StrokeData): ShapeDescriptor {
+// `data` may be undefined: Firebase RTDB drops empty objects, so a stroke whose
+// data serialized to {} round-trips back with no `data` key at all.
+export function descriptorFromStroke(data?: StrokeData): ShapeDescriptor {
+  data ??= {}
   return {
     points: data.points ?? [],
     x: data.x ?? 0,

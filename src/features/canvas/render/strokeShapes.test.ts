@@ -61,6 +61,20 @@ describe('descriptor adapters', () => {
     expect(live.strokeWidth).toBe(5)
   })
 
+  it('tolerates undefined data (RTDB drops strokes whose data serialized to {})', () => {
+    expect(descriptorFromStroke(undefined)).toEqual({
+      points: [],
+      x: 0,
+      y: 0,
+      width: 0,
+      height: 0,
+      radiusX: 0,
+      radiusY: 0,
+      color: undefined,
+      strokeWidth: undefined,
+    })
+  })
+
   it('defaults missing fields to zero for legacy data', () => {
     expect(descriptorFromStroke({})).toEqual({
       points: [],

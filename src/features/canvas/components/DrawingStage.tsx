@@ -244,6 +244,11 @@ export function DrawingStage({
     }
     if (disabled) return;
     if (tool === 'text') {
+      // If a box is mid-edit, this is a "click away to finish": let the textarea's
+      // blur commit the text instead of starting a new box. Starting a draw here
+      // would leak past the blur's onToolChange('select') and commit a phantom
+      // empty-data 'select' stroke on mouseup (see handleMouseUp guard below).
+      if (active?.editing) return;
       // Drag-to-size like rect; a plain click becomes a default-width box on mouseup.
       isDrawing.current = true;
       const { x, y } = getPos();
@@ -420,7 +425,17 @@ export function DrawingStage({
     }
 
     const points = livePointsRef.current;
-    if (!isDrawing.current || points.length < 4) {
+    // Only real drawing tools commit here. If the tool flipped to a non-drawing
+    // tool mid-gesture (e.g. a text edit's blur switched us to 'select' between
+    // mousedown and mouseup), bail — committing would serialize empty data.
+    const isDrawingTool =
+      tool === 'pen' ||
+      tool === 'brush' ||
+      tool === 'eraser' ||
+      tool === 'rect' ||
+      tool === 'circle' ||
+      tool === 'line';
+    if (!isDrawing.current || points.length < 4 || !isDrawingTool) {
       isDrawing.current = false;
       livePointsRef.current = [];
       liveStartRef.current = null;
