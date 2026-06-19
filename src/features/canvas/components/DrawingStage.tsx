@@ -25,6 +25,7 @@ import {
 } from '../render/strokeShapes';
 import { BoxControls } from './BoxControls';
 import { TextBoxEditor } from './TextBoxEditor';
+import { useViewport } from '../hooks/useViewport';
 import type { LiveStroke } from '../hooks/useLiveStrokes';
 import { useWiggle } from '../hooks/useWiggle';
 
@@ -54,11 +55,6 @@ interface Props {
   wiggle?: boolean;
 }
 
-const CANVAS_WIDTH = 1920;
-const CANVAS_HEIGHT = 1080;
-const MIN_ZOOM = 0.25;
-const MAX_ZOOM = 3;
-
 export function DrawingStage({
   strokes,
   tool,
@@ -80,17 +76,9 @@ export function DrawingStage({
   wiggle = true,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [containerSize, setContainerSize] = useState({ w: 0, h: 0 });
   const layerRef = useRef<Konva.Layer>(null);
   const liveLineRef = useRef<Konva.Line | null>(null);
   const liveShapeRef = useRef<Konva.Shape | null>(null);
-
-  // Viewport — refs for synchronous access in handlers, state for rendering
-  const zoomRef = useRef(1);
-  const panRef = useRef({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const initializedRef = useRef(false);
 
   // Drawing state
   const isDrawing = useRef(false);
@@ -176,17 +164,38 @@ export function DrawingStage({
   const strokesLenRef = useRef(strokes.length);
   strokesLenRef.current = strokes.length;
 
-  // Pan state
+  // Pan state (hand-tool drag)
   const isPanning = useRef(false);
   const lastClientPos = useRef({ x: 0, y: 0 });
 
-  // Two-finger touch state
-  const lastTouchRef = useRef<{
-    x1: number;
-    y1: number;
-    x2: number;
-    y2: number;
-  } | null>(null);
+  // Abandon any in-progress stroke (used when a pinch gesture starts).
+  const cancelStroke = useCallback(() => {
+    if (!isDrawing.current) return;
+    isDrawing.current = false;
+    livePointsRef.current = [];
+    liveStartRef.current = null;
+    setLivePoints([]);
+    onLiveUpdate?.(null);
+  }, [onLiveUpdate]);
+
+  const {
+    zoom,
+    pan,
+    zoomRef,
+    containerSize,
+    panBy,
+    handleWheel,
+    handleTouchStart,
+    handleTouchMove,
+    handleTouchEnd,
+  } = useViewport({
+    stageRef,
+    containerRef,
+    layerRef,
+    navRef,
+    onViewportChange,
+    onPinchStart: cancelStroke,
+  });
 
   const { registerStroke, unregisterStroke, registerLive, unregisterLive } =
     useWiggle(layerRef, wiggle);
@@ -221,63 +230,6 @@ export function DrawingStage({
   const liveShapeCb = useCallback((node: Konva.Node | null) => {
     liveShapeRef.current = node as Konva.Shape | null;
   }, []);
-
-  const applyViewport = useCallback(
-    (newZoom: number, newPan: { x: number; y: number }) => {
-      zoomRef.current = newZoom;
-      panRef.current = newPan;
-      setZoom(newZoom);
-      setPan(newPan);
-      onViewportChange?.(newZoom, newPan);
-    },
-    [onViewportChange],
-  );
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-
-    // Prevent browser scroll when wheeling over canvas
-    const preventScroll = (e: WheelEvent) => e.preventDefault();
-    el.addEventListener('wheel', preventScroll, { passive: false });
-
-    // Prevent browser pinch-zoom / overscroll on two-finger touch
-    const preventTwoFingerScroll = (e: TouchEvent) => {
-      if (e.touches.length >= 2) e.preventDefault();
-    };
-    el.addEventListener('touchstart', preventTwoFingerScroll, {
-      passive: false,
-    });
-    el.addEventListener('touchmove', preventTwoFingerScroll, {
-      passive: false,
-    });
-
-    const ro = new ResizeObserver(() => {
-      const { width, height } = el.getBoundingClientRect();
-      if (width === 0 || height === 0) return;
-      setContainerSize({ w: width, h: height });
-
-      if (!initializedRef.current) {
-        initializedRef.current = true;
-        const fitZoom = Math.min(
-          1,
-          width / CANVAS_WIDTH,
-          height / CANVAS_HEIGHT,
-        );
-        applyViewport(fitZoom, {
-          x: (width - CANVAS_WIDTH * fitZoom) / 2,
-          y: (height - CANVAS_HEIGHT * fitZoom) / 2,
-        });
-      }
-    });
-    ro.observe(el);
-    return () => {
-      ro.disconnect();
-      el.removeEventListener('wheel', preventScroll);
-      el.removeEventListener('touchstart', preventTwoFingerScroll);
-      el.removeEventListener('touchmove', preventTwoFingerScroll);
-    };
-  }, [applyViewport]);
 
   // Canvas coords from Konva (accounts for stage x/y/scale automatically)
   const getPos = () =>
@@ -334,8 +286,7 @@ export function DrawingStage({
       const dx = e.evt.clientX - lastClientPos.current.x;
       const dy = e.evt.clientY - lastClientPos.current.y;
       lastClientPos.current = { x: e.evt.clientX, y: e.evt.clientY };
-      const newPan = { x: panRef.current.x + dx, y: panRef.current.y + dy };
-      applyViewport(zoomRef.current, newPan);
+      panBy(dx, dy);
       return;
     }
 
@@ -521,102 +472,6 @@ export function DrawingStage({
     strokes,
     clearSelection,
   ]);
-
-  const handleWheel = (e: KonvaEventObject<WheelEvent>) => {
-    const pointer = stageRef.current?.getPointerPosition();
-    if (!pointer) return;
-
-    const dir = e.evt.deltaY < 0 ? 1 : -1;
-    const newZoom = Math.max(
-      MIN_ZOOM,
-      Math.min(MAX_ZOOM, Math.round((zoomRef.current + dir * 0.1) * 10) / 10),
-    );
-    const ratio = newZoom / zoomRef.current;
-    applyViewport(newZoom, {
-      x: pointer.x - (pointer.x - panRef.current.x) * ratio,
-      y: pointer.y - (pointer.y - panRef.current.y) * ratio,
-    });
-  };
-
-  const handleTouchStart = (e: KonvaEventObject<TouchEvent>) => {
-    if (e.evt.touches.length < 2) return;
-    // Cancel any ongoing single-touch stroke
-    if (isDrawing.current) {
-      isDrawing.current = false;
-      livePointsRef.current = [];
-      liveStartRef.current = null;
-      setLivePoints([]);
-      onLiveUpdate?.(null);
-    }
-    const t = e.evt.touches;
-    lastTouchRef.current = {
-      x1: t[0].clientX,
-      y1: t[0].clientY,
-      x2: t[1].clientX,
-      y2: t[1].clientY,
-    };
-  };
-
-  const handleTouchMove = (e: KonvaEventObject<TouchEvent>) => {
-    if (e.evt.touches.length < 2 || !lastTouchRef.current) return;
-    const prev = lastTouchRef.current;
-    const t = e.evt.touches;
-    const cur = {
-      x1: t[0].clientX,
-      y1: t[0].clientY,
-      x2: t[1].clientX,
-      y2: t[1].clientY,
-    };
-
-    const prevMidX = (prev.x1 + prev.x2) / 2;
-    const prevMidY = (prev.y1 + prev.y2) / 2;
-    const curMidX = (cur.x1 + cur.x2) / 2;
-    const curMidY = (cur.y1 + cur.y2) / 2;
-    const prevDist = Math.hypot(prev.x2 - prev.x1, prev.y2 - prev.y1);
-    const curDist = Math.hypot(cur.x2 - cur.x1, cur.y2 - cur.y1);
-
-    const scale = prevDist > 1 ? curDist / prevDist : 1;
-    const newZoom = Math.max(
-      MIN_ZOOM,
-      Math.min(MAX_ZOOM, zoomRef.current * scale),
-    );
-    const ratio = newZoom / zoomRef.current;
-    applyViewport(newZoom, {
-      x: curMidX - (prevMidX - panRef.current.x) * ratio,
-      y: curMidY - (prevMidY - panRef.current.y) * ratio,
-    });
-    lastTouchRef.current = cur;
-  };
-
-  const handleTouchEnd = () => {
-    lastTouchRef.current = null;
-    const stage = stageRef.current;
-    if (!stage) return;
-    const snapped = Math.max(
-      MIN_ZOOM,
-      Math.min(MAX_ZOOM, Math.round(zoomRef.current * 10) / 10),
-    );
-    if (snapped !== zoomRef.current) {
-      const vpCx = -panRef.current.x / zoomRef.current + stage.width() / 2;
-      const vpCy = -panRef.current.y / zoomRef.current + stage.height() / 2;
-      applyViewport(snapped, {
-        x: stage.width() / 2 - vpCx * snapped,
-        y: stage.height() / 2 - vpCy * snapped,
-      });
-    }
-  };
-
-  // Expose applyViewport + raw layer canvas to parent via navRef (for minimap/zoom controls)
-  useEffect(() => {
-    if (!navRef) return;
-    navRef.current = {
-      applyViewport,
-      getLayer: () => layerRef.current,
-    };
-    return () => {
-      navRef.current = null;
-    };
-  }, [navRef, applyViewport]);
 
   // Side effects must live OUTSIDE setActive's updater — StrictMode double-invokes
   // updater fns in dev, which would commit the new stroke twice. The editor's own
