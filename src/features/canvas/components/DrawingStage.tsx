@@ -1,5 +1,5 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
-import { Stage, Layer, Line, Rect, Group } from 'react-konva';
+import { Stage, Layer, Rect, Group } from 'react-konva';
 import type Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import type { Stroke, StrokeData, ToolType } from '../../../lib/types';
@@ -24,6 +24,7 @@ import {
   type SimpleStrokeType,
 } from '../render/strokeShapes';
 import { TextBoxNode } from './TextBoxNode';
+import { BoxControls } from './BoxControls';
 import { TextBoxEditor } from './TextBoxEditor';
 import type { ActiveBox, XformBox } from './textBoxTypes';
 import { useViewport } from '../hooks/useViewport';
@@ -781,192 +782,42 @@ export function DrawingStage({
               )}
             {!disabled && renderLiveStroke()}
             {/* Create-only overlay: a brand-new box (active.id === null) has no committed
-                stroke yet, so it has no draggable Group of its own — render its border +
-                rotate knob + 8 resize handles + edit catcher here. Committed boxes draw
-                the same controls as children of their stroke Group (see renderStroke),
-                so border + text move together on drag. Handles write `active`; persist is
-                a no-op until the text commits. */}
-            {active &&
-              active.id === null &&
-              (() => {
-                const W = active.width,
-                  H = active.height;
-                const hs = 11 / zoom;
-                const rotGap = 26 / zoom;
-                const st0 = {
-                  x: active.x,
-                  y: active.y,
-                  width: active.width,
-                  height: active.height,
-                  rotation: active.rotation,
-                };
-                const persist = () => {
-                  if (active.id)
-                    onUpdateStroke?.(active.id, {
-                      x: active.x,
-                      y: active.y,
-                      width: active.width,
-                      height: active.height,
-                      rotation: active.rotation,
-                    });
-                };
-                // Group transformed exactly like the box: at box centre, rotated, so local
-                // coords (0,0)..(W,H) trace the box.
-                return (
-                  <Group
-                    x={active.x + W / 2}
-                    y={active.y + H / 2}
-                    offsetX={W / 2}
-                    offsetY={H / 2}
-                    rotation={active.rotation}
-                  >
-                    {/* Full-box catcher (edit only): mousedown preventDefault keeps the
-                      textarea focused, so clicking the empty box area never commits.
-                      Below the handles (declared first), above the canvas text. */}
-                    {active.editing && (
-                      <Rect
-                        x={0}
-                        y={0}
-                        width={W}
-                        height={H}
-                        fill='transparent'
-                        onMouseDown={(e) => {
-                          e.evt.preventDefault();
-                        }}
-                      />
-                    )}
-                    <Rect
-                      x={0}
-                      y={0}
-                      width={W}
-                      height={H}
-                      stroke='#3d5afe'
-                      strokeWidth={1.5 / zoom}
-                      dash={[6 / zoom, 4 / zoom]}
-                      listening={false}
-                    />
-                    {/* Rotate knob above the top edge */}
-                    <Line
-                      points={[W / 2, 0, W / 2, -rotGap]}
-                      stroke='#3d5afe'
-                      strokeWidth={1.5 / zoom}
-                      listening={false}
-                    />
-                    <Rect
-                      x={W / 2 - hs / 2}
-                      y={-rotGap - hs / 2}
-                      width={hs}
-                      height={hs}
-                      cornerRadius={hs / 2}
-                      fill='#ffffff'
-                      stroke='#3d5afe'
-                      strokeWidth={1.5 / zoom}
-                      hitStrokeWidth={22 / zoom}
-                      draggable
-                      onMouseDown={(e) => {
-                        e.evt.preventDefault();
-                      }}
-                      onMouseEnter={(e) => {
-                        const c = e.target.getStage()?.container();
-                        if (c) c.style.cursor = 'grab';
-                      }}
-                      onMouseLeave={(e) => {
-                        const c = e.target.getStage()?.container();
-                        if (c) c.style.cursor = 'default';
-                      }}
-                      onDragStart={() => {
-                        handleStartRef.current = st0;
-                      }}
-                      onDragMove={(e) => {
-                        const st = handleStartRef.current;
-                        const wp =
-                          stageRef.current?.getRelativePointerPosition();
-                        if (!st || !wp) return;
-                        const cx = st.x + st.width / 2,
-                          cy = st.y + st.height / 2;
-                        const ang =
-                          (Math.atan2(wp.y - cy, wp.x - cx) * 180) / Math.PI +
-                          90;
-                        setActive((prev) =>
-                          prev ? { ...prev, rotation: ang } : prev,
-                        );
-                        e.target.position({
-                          x: st.width / 2 - hs / 2,
-                          y: -rotGap - hs / 2,
-                        });
-                      }}
-                      onDragEnd={persist}
-                    />
-                    {/* 8 resize handles, math done in the box's fixed start frame */}
-                    {RESIZE_HANDLES.map(({ role, cursor: hCursor }) => {
-                      const a = handleAnchor(role, {
-                        x: 0,
-                        y: 0,
-                        width: W,
-                        height: H,
+                stroke yet, so it has no draggable Group of its own — render the same
+                BoxControls a committed box draws (see TextBoxNode), in a Group transformed
+                exactly like the box. Handles write `active`; persist is a no-op until the
+                text commits. */}
+            {active && active.id === null && (
+              <Group
+                x={active.x + active.width / 2}
+                y={active.y + active.height / 2}
+                offsetX={active.width / 2}
+                offsetY={active.height / 2}
+                rotation={active.rotation}
+              >
+                <BoxControls
+                  w={active.width}
+                  h={active.height}
+                  zoom={zoom}
+                  editing={active.editing}
+                  stageRef={stageRef}
+                  handleStartRef={handleStartRef}
+                  geom={active}
+                  onChange={(p) =>
+                    setActive((prev) => (prev ? { ...prev, ...p } : prev))
+                  }
+                  onCommit={() => {
+                    if (active.id)
+                      onUpdateStroke?.(active.id, {
+                        x: active.x,
+                        y: active.y,
+                        width: active.width,
+                        height: active.height,
+                        rotation: active.rotation,
                       });
-                      return (
-                        <Rect
-                          key={role}
-                          x={a.x - hs / 2}
-                          y={a.y - hs / 2}
-                          width={hs}
-                          height={hs}
-                          fill='#ffffff'
-                          stroke='#3d5afe'
-                          strokeWidth={1.5 / zoom}
-                          hitStrokeWidth={22 / zoom}
-                          draggable
-                          onMouseDown={(e) => {
-                            e.evt.preventDefault();
-                          }}
-                          onMouseEnter={(e) => {
-                            const c = e.target.getStage()?.container();
-                            if (c) c.style.cursor = hCursor;
-                          }}
-                          onMouseLeave={(e) => {
-                            const c = e.target.getStage()?.container();
-                            if (c) c.style.cursor = 'default';
-                          }}
-                          onDragStart={() => {
-                            handleStartRef.current = st0;
-                          }}
-                          onDragMove={(e) => {
-                            const st = handleStartRef.current;
-                            const wp =
-                              stageRef.current?.getRelativePointerPosition();
-                            if (!st || !wp) return;
-                            const nb = resizeFromPointer(role, st, wp);
-                            setActive((prev) =>
-                              prev
-                                ? {
-                                    ...prev,
-                                    x: nb.x,
-                                    y: nb.y,
-                                    width: nb.width,
-                                    height: nb.height,
-                                    rotation: nb.rotation,
-                                  }
-                                : prev,
-                            );
-                            const la = handleAnchor(role, {
-                              x: 0,
-                              y: 0,
-                              width: nb.width,
-                              height: nb.height,
-                            });
-                            e.target.position({
-                              x: la.x - hs / 2,
-                              y: la.y - hs / 2,
-                            });
-                          }}
-                          onDragEnd={persist}
-                        />
-                      );
-                    })}
-                  </Group>
-                );
-              })()}
+                  }}
+                />
+              </Group>
+            )}
             {/* Rubber-band marquee while dragging on empty canvas. Solid thin line
                 + translucent fill — deliberately distinct from the dashed outlines
                 that mark a finished selection. */}
