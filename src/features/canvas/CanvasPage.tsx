@@ -14,13 +14,14 @@ import { useLiveStrokes } from './hooks/useLiveStrokes'
 import type { LiveStroke } from './hooks/useLiveStrokes'
 import { DrawingStage } from './components/DrawingStage'
 import type { NavHandle } from './components/DrawingStage'
+import { CanvasTopBar } from './components/CanvasTopBar'
+import { useCanvasKeyboard } from './hooks/useCanvasKeyboard'
 import { Toolbar } from './components/Toolbar'
 import { CursorOverlay } from './components/CursorOverlay'
 import { Minimap } from './components/Minimap'
 import type { MinimapHandle } from './components/Minimap'
 import { ZoomControls } from './components/ZoomControls'
 import { InviteModal } from '../sharing/InviteModal'
-import { Icon } from '../../lib/icons'
 import { ConfirmModal } from '../../lib/ConfirmModal'
 import { pickUserColor, STROKE_CAP } from '../../lib/types'
 import type { CanvasDoc, Stroke, ToolType } from '../../lib/types'
@@ -45,9 +46,7 @@ export function CanvasPage() {
   const stageRef      = useRef<Konva.Stage>(null)
   const navRef        = useRef<NavHandle | null>(null)
   const minimapHandle = useRef<MinimapHandle | null>(null)
-  const prevToolRef = useRef<ToolType>('pen')
   const toolRef = useRef<ToolType>('pen')
-  const spaceActivatedHandRef = useRef(false)
 
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 640)
   useEffect(() => {
@@ -183,47 +182,7 @@ export function CanvasPage() {
     if (data) emitLiveStroke(data); else clearLiveStroke()
   }, [emitLiveStroke, clearLiveStroke])
 
-  useEffect(() => {
-    const isTyping = (e: KeyboardEvent) =>
-      e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'z') {
-        e.preventDefault()
-        handleRedo()
-        return
-      }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
-        e.preventDefault()
-        handleUndo()
-        return
-      }
-      if (e.code === 'Space' && !isTyping(e)) {
-        e.preventDefault()
-        if (toolRef.current !== 'hand') {
-          prevToolRef.current = toolRef.current
-          spaceActivatedHandRef.current = true
-          setTool('hand')
-        }
-      }
-    }
-    const onKeyUp = (e: KeyboardEvent) => {
-      if (e.code === 'Space' && !isTyping(e)) {
-        if (spaceActivatedHandRef.current) {
-          spaceActivatedHandRef.current = false
-          if (toolRef.current === 'hand') {
-            setTool(prevToolRef.current)
-          }
-        }
-      }
-    }
-    window.addEventListener('keydown', onKeyDown)
-    window.addEventListener('keyup', onKeyUp)
-    return () => {
-      window.removeEventListener('keydown', onKeyDown)
-      window.removeEventListener('keyup', onKeyUp)
-    }
-  }, [handleUndo, handleRedo])
+  useCanvasKeyboard({ toolRef, setTool, onUndo: handleUndo, onRedo: handleRedo })
 
   const displayNames: Record<string, string> = {}
   Object.entries(presence).forEach(([id, entry]) => { displayNames[id] = entry.displayName })
@@ -241,115 +200,22 @@ export function CanvasPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', overflow: 'hidden', background: 'var(--m-bg)' }}>
-      {/* Topbar */}
-      <div
-        className="m-row m-between m-canvas-top"
-        style={{ padding: '11px 18px', borderBottom: '1px solid var(--m-line)', background: 'var(--m-surface)', zIndex: 6, flexShrink: 0 }}
-      >
-        {/* Left: back + title */}
-        <div className="m-row m-g12">
-          <button
-            className="m-btn m-btn-ghost m-btn-sm"
-            onClick={() => navigate('/')}
-            style={{ boxShadow: 'inset 0 0 0 1.5px var(--m-line)' }}
-          >
-            <Icon name="back" size={17} />
-            <span className="m-canvas-back-label">Dashboard</span>
-          </button>
-
-          <div className="m-row m-g8">
-            {isOwner && editingTitle ? (
-              <input
-                value={titleDraft}
-                onChange={e => setTitleDraft(e.target.value)}
-                onBlur={handleTitleSave}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') handleTitleSave()
-                  if (e.key === 'Escape') setEditingTitle(false)
-                }}
-                autoFocus
-                style={{
-                  fontFamily: 'var(--disp)', fontWeight: 600, fontSize: 17, color: 'var(--m-ink)',
-                  border: 'none', outline: 'none', background: 'transparent',
-                  borderBottom: '2px solid var(--m-primary)',
-                  minWidth: 80, maxWidth: 260,
-                }}
-              />
-            ) : (
-              <span
-                onClick={() => { if (!isOwner) return; setTitleDraft(canvasDoc.title); setEditingTitle(true) }}
-                title={isOwner ? 'Click to rename' : undefined}
-                style={{
-                  fontFamily: 'var(--disp)', fontWeight: 600, fontSize: 17, color: 'var(--m-ink)',
-                  cursor: isOwner ? 'pointer' : 'default',
-                  maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                }}
-              >
-                {canvasDoc.title}
-              </span>
-            )}
-
-            {/* Saved chip */}
-            <span
-              className="m-tiny m-faint m-row m-g4"
-              style={{ flexShrink: 0 }}
-            >
-              <Icon name="check" size={14} color="var(--m-green)" />
-              Saved
-            </span>
-          </div>
-        </div>
-
-        {/* Right: collab avatars + undo/redo + share */}
-        <div className="m-row m-g10">
-          {/* Collab avatars */}
-          {presenceEntries.length > 0 && (
-            <div className="m-row m-collab" style={{ marginRight: 2 }}>
-              {presenceEntries.map(([id, entry], i) => (
-                <div
-                  key={id}
-                  className="m-ava"
-                  title={entry.displayName + (id === uid ? ' (you)' : '')}
-                  style={{ width: 28, height: 28, fontSize: 11, marginLeft: i ? -8 : 0, background: entry.color }}
-                >
-                  {entry.displayName.charAt(0).toUpperCase()}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Undo */}
-          <button
-            className="m-tool"
-            onClick={handleUndo}
-            title="Undo (Ctrl+Z)"
-            style={{ width: 40, height: 40 }}
-          >
-            <Icon name="undo" size={19} />
-          </button>
-
-          {/* Redo */}
-          <button
-            className="m-tool"
-            onClick={handleRedo}
-            title="Redo (Ctrl+Shift+Z)"
-            style={{ width: 40, height: 40 }}
-          >
-            <Icon name="redo" size={19} />
-          </button>
-
-          {/* Share */}
-          {isOwner && (
-            <button
-              className="m-btn m-btn-primary m-btn-sm"
-              onClick={() => setShowInvite(true)}
-            >
-              <Icon name="share" size={16} color="#fff" />
-              Share
-            </button>
-          )}
-        </div>
-      </div>
+      <CanvasTopBar
+        title={canvasDoc.title}
+        isOwner={isOwner}
+        editingTitle={editingTitle}
+        titleDraft={titleDraft}
+        setTitleDraft={setTitleDraft}
+        onTitleSave={handleTitleSave}
+        onTitleEditStart={() => { setTitleDraft(canvasDoc.title); setEditingTitle(true) }}
+        onTitleEditCancel={() => setEditingTitle(false)}
+        presenceEntries={presenceEntries}
+        uid={uid}
+        onBack={() => navigate('/')}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        onShare={() => setShowInvite(true)}
+      />
 
       {/* Guest banner */}
       {user!.isAnonymous && (
