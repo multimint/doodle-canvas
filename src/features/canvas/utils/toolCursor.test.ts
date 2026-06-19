@@ -9,6 +9,7 @@ describe('toolCursorVariant', () => {
   it('uses a filled dot for the color free-draw tools', () => {
     expect(toolCursorVariant('pen')).toBe('filled')
     expect(toolCursorVariant('brush')).toBe('filled')
+    expect(toolCursorVariant('marker')).toBe('filled')
   })
 
   it('uses a hollow ring for the eraser', () => {
@@ -31,6 +32,7 @@ describe('toolCursorVariant', () => {
 describe('usesToolCursor', () => {
   it('is true for every drawing tool and false otherwise', () => {
     expect(usesToolCursor('pen')).toBe(true)
+    expect(usesToolCursor('marker')).toBe(true)
     expect(usesToolCursor('eraser')).toBe(true)
     expect(usesToolCursor('rect')).toBe(true)
     expect(usesToolCursor('text')).toBe(false)

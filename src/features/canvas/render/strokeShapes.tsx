@@ -1,7 +1,8 @@
-import { Line, Rect, Ellipse, Shape } from 'react-konva'
+import { Line, Shape } from 'react-konva'
 import type Konva from 'konva'
 import type { ReactElement } from 'react'
 import { generateSprayPoints, brushSceneFunc } from '../utils/sprayUtils'
+import { rectToPerimeter, ellipseToPerimeter, jitterMag } from '../utils/wiggleUtils'
 import type { ShapeDescriptor, SimpleStrokeType } from './strokeDescriptor'
 
 // The single place that knows how each non-text Stroke type maps to a Konva node.
@@ -49,18 +50,35 @@ export function renderShape(
         />
       )
     case 'brush': {
-      const sprayPoints = generateSprayPoints(d.points, d.strokeWidth ?? 6)
-      const dotSize = Math.max(1, Math.floor((d.strokeWidth ?? 6) / 6))
+      const sw = d.strokeWidth ?? 6
+      const sprayPoints = generateSprayPoints(d.points, sw)
+      const dotSize = Math.max(1, Math.floor(sw / 6))
       return (
         <Shape
           {...common}
           fill={d.color}
           sceneFunc={brushSceneFunc}
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          {...({ sprayPoints, dotSize, animT: 0 } as any)}
+          {...({ sprayPoints, dotSize, jmag: jitterMag(sw), animT: 0 } as any)}
         />
       )
     }
+    case 'marker':
+      // A broad felt-tip stroke. Drawn FULLY OPAQUE so overlapping marker strokes just
+      // cover each other instead of stacking alpha (no darkening where they cross). The
+      // highlighter translucency is applied once to the whole marker layer via CSS opacity
+      // (see MARKER_LAYER_OPACITY in DrawingStage). Boils via the pen's points-swap path.
+      return (
+        <Line
+          {...common}
+          points={d.points}
+          stroke={d.color}
+          strokeWidth={(d.strokeWidth ?? 6) * 3}
+          lineCap='round'
+          lineJoin='round'
+          tension={0.4}
+        />
+      )
     case 'eraser':
       return (
         <Line
@@ -74,30 +92,29 @@ export function renderShape(
           globalCompositeOperation='destination-out'
         />
       )
+    // Rect/circle render as closed polylines tracing their outline (not Rect/Ellipse
+    // nodes) so the boil can jitter their vertices like any other line. Selection is
+    // text-only, so nothing depends on these being true geometric primitives.
     case 'rect':
       return (
-        <Rect
+        <Line
           {...common}
-          x={d.x}
-          y={d.y}
-          width={d.width}
-          height={d.height}
+          points={rectToPerimeter(d.x, d.y, d.width, d.height)}
           stroke={d.color}
           strokeWidth={d.strokeWidth}
-          fill='transparent'
+          lineJoin='round'
+          closed
         />
       )
     case 'circle':
       return (
-        <Ellipse
+        <Line
           {...common}
-          x={d.x}
-          y={d.y}
-          radiusX={d.radiusX}
-          radiusY={d.radiusY}
+          points={ellipseToPerimeter(d.x, d.y, d.radiusX, d.radiusY)}
           stroke={d.color}
           strokeWidth={d.strokeWidth}
-          fill='transparent'
+          lineJoin='round'
+          closed
         />
       )
     case 'line':

@@ -1,4 +1,4 @@
-export type ToolType = 'pen' | 'brush' | 'eraser' | 'rect' | 'circle' | 'line' | 'text' | 'hand' | 'select'
+export type ToolType = 'pen' | 'brush' | 'marker' | 'eraser' | 'rect' | 'circle' | 'line' | 'text' | 'hand' | 'select'
 
 export interface UserDoc {
   email: string
@@ -43,7 +43,7 @@ export interface StrokeData {
 
 export interface Stroke {
   id: string
-  type: 'path' | 'brush' | 'rect' | 'circle' | 'line' | 'text' | 'eraser'
+  type: 'path' | 'brush' | 'marker' | 'rect' | 'circle' | 'line' | 'text' | 'eraser'
   authorId: string
   data: StrokeData
   timestamp: number

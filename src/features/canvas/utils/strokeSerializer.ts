@@ -24,6 +24,9 @@ export function buildStrokeData(
   if (tool === 'brush') {
     return { points, stroke: color, strokeWidth }
   }
+  if (tool === 'marker') {
+    return { points, stroke: color, strokeWidth }
+  }
   if (tool === 'line') {
     return { points, stroke: color, strokeWidth }
   }

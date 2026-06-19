@@ -10,6 +10,14 @@ describe('buildStrokeData', () => {
     })
   })
 
+  it('keeps raw points for the marker like other freehand tools', () => {
+    expect(buildStrokeData('marker', [0, 0, 5, 5], '#abc', 8)).toEqual({
+      points: [0, 0, 5, 5],
+      stroke: '#abc',
+      strokeWidth: 8,
+    })
+  })
+
   it('marks eraser strokes with a destination-out composite op', () => {
     const d = buildStrokeData('eraser', [0, 0, 1, 1], '#000', 8)
     expect(d.globalCompositeOperation).toBe('destination-out')

@@ -1,6 +1,7 @@
 const M_PATHS: Record<string, string> = {
   pen:      '<path d="M4 20l4.6-1.3L19 8.3 15.7 5 5.3 15.4 4 20z"/><path d="M14.5 6.2l3.3 3.3"/>',
   brush:    '<line x1="18" y1="2" x2="22" y2="6"/><path d="M7.5 20.5L2 22l1.5-5.5L17.5 2.5a2.121 2.121 0 0 1 3 3z"/>',
+  marker:   '<path d="M14 4.5l5.5 5.5-9 9-5.5.9.9-5.5z"/><path d="M3 22h6"/>',
   line:     '<path d="M5 19L19 5"/>',
   square:   '<rect x="4.5" y="6" width="15" height="12" rx="3"/>',
   circle:   '<circle cx="12" cy="12" r="7.6"/>',

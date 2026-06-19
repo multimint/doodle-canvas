@@ -1,6 +1,5 @@
 import type Konva from 'konva'
-
-const JITTER_MS = 80
+import { jrand } from './wiggleUtils'
 
 export function generateSprayPoints(rawPoints: number[], strokeWidth: number): number[] {
   const radius       = strokeWidth * 2.5
@@ -49,24 +48,23 @@ export function generateSprayPoints(rawPoints: number[], strokeWidth: number): n
 }
 
 export function brushSceneFunc(ctx: Konva.Context, shape: Konva.Shape) {
-  const t   = (shape.getAttr('animT')       as number)   ?? 0
-  const sp  = (shape.getAttr('sprayPoints') as number[]) ?? []
-  const ds  = (shape.getAttr('dotSize')     as number)   ?? 2
-  const frame = Math.floor(t / JITTER_MS)
+  // animT carries the shared boil frame index (0..FRAMES-1), set by useWiggle.
+  const frame = (shape.getAttr('animT')      as number)   ?? 0
+  const sp    = (shape.getAttr('sprayPoints') as number[]) ?? []
+  const ds    = (shape.getAttr('dotSize')     as number)   ?? 2
+  const jmag  = (shape.getAttr('jmag')        as number)   ?? 1.5
   // Use underlying canvas2D for rect() (path method not exposed on Konva.Context).
   // beginPath/fillShape go through the Konva proxy so hit-canvas colorKey is preserved.
   const c2d = (ctx as unknown as { _context: CanvasRenderingContext2D })._context
 
-  const move = frame % 4  // 0-3 pixels, cycles every 4 jitter frames (~320ms)
-
   ctx.beginPath()
   for (let i = 0; i < sp.length; i += 2) {
-    const idx  = i >>> 1
-    // Direction is fixed per dot (hash of index only, no frame involvement)
-    const dir  = (((idx * 2246822519) | 0) >>> 0) % 4  // 0=right 1=left 2=down 3=up
-    const jx   = dir === 0 ?  move : dir === 1 ? -move : 0
-    const jy   = dir === 2 ?  move : dir === 3 ? -move : 0
-    c2d.rect(Math.round(sp[i]) + jx, Math.round(sp[i + 1]) + jy, ds, ds)
+    const idx = i >>> 1
+    // Each dot hops between FRAMES fixed jittered spots — a per-dot, per-frame offset so
+    // the whole spray boils coherently with the rest of the canvas.
+    const jx = jrand(idx, frame, 0) * jmag
+    const jy = jrand(idx, frame, 1) * jmag
+    c2d.rect(Math.round(sp[i] + jx), Math.round(sp[i + 1] + jy), ds, ds)
   }
   ctx.fillShape(shape)
 }

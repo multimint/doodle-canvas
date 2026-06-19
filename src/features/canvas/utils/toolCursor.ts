@@ -15,7 +15,7 @@ export type ToolCursorVariant =
   | 'none' // text / hand / select: no follower, keep the native cursor
 
 export function toolCursorVariant(tool: ToolType): ToolCursorVariant {
-  if (tool === 'pen' || tool === 'brush') return 'filled'
+  if (tool === 'pen' || tool === 'brush' || tool === 'marker') return 'filled'
   if (tool === 'eraser') return 'ring'
   if (tool === 'line' || tool === 'rect' || tool === 'circle') return 'crosshair'
   return 'none'

@@ -82,6 +82,10 @@ export function DrawingStage({
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const layerRef = useRef<Konva.Layer>(null);
+  // Markers render on their own layer behind the main one. The eraser uses destination-out
+  // compositing, which only affects its own layer's canvas — so markers stay behind every
+  // other stroke AND are never erased ("in front of" the eraser).
+  const bgLayerRef = useRef<Konva.Layer>(null);
   const liveLineRef = useRef<Konva.Line | null>(null);
   const liveShapeRef = useRef<Konva.Shape | null>(null);
 
@@ -195,8 +199,13 @@ export function DrawingStage({
     onPinchStart: cancelStroke,
   });
 
-  const { registerStroke, unregisterStroke, registerLive, unregisterLive } =
-    useWiggle(layerRef, wiggle);
+  const {
+    registerStroke,
+    unregisterStroke,
+    registerLive,
+    unregisterLive,
+    setFrozenText,
+  } = useWiggle(layerRef, wiggle);
 
   // Stable ref callbacks keyed by stroke ID — prevents unregister/register churn on every re-render
   const refCacheRef = useRef<Map<string, (node: Konva.Node | null) => void>>(
@@ -342,7 +351,12 @@ export function DrawingStage({
     if (!isDrawing.current) return;
 
     let newPoints: number[];
-    if (tool === 'pen' || tool === 'brush' || tool === 'eraser') {
+    if (
+      tool === 'pen' ||
+      tool === 'brush' ||
+      tool === 'marker' ||
+      tool === 'eraser'
+    ) {
       newPoints = [...livePointsRef.current, x, y];
     } else if (liveStartRef.current) {
       newPoints = [liveStartRef.current.x, liveStartRef.current.y, x, y];
@@ -484,6 +498,7 @@ export function DrawingStage({
     const isDrawingTool =
       tool === 'pen' ||
       tool === 'brush' ||
+      tool === 'marker' ||
       tool === 'eraser' ||
       tool === 'rect' ||
       tool === 'circle' ||
@@ -646,6 +661,16 @@ export function DrawingStage({
     setCursorVisible(false);
   }, [tool]);
 
+  // Text Boxes boil only while idle: freeze the selected/edited box(es) so their handles
+  // and the editor textarea stay aligned with stationary glyphs. A brand-new box
+  // (active.id === null) has no committed node yet, so there's nothing to freeze.
+  useEffect(() => {
+    const ids: string[] = [];
+    if (active?.id) ids.push(active.id);
+    if (multiIds.length) ids.push(...multiIds);
+    setFrozenText(ids);
+  }, [active?.id, multiIds, setFrozenText]);
+
   // Konva measures/caches text with whatever font is available at draw time. If a Text
   // Box mounts before the doodle font (Patrick Hand) has loaded it renders in the
   // fallback and stays there until something redraws — so force one redraw once fonts
@@ -750,12 +775,14 @@ export function DrawingStage({
 
   useEffect(() => {
     if (livePoints.length >= 4) {
+      // brush is a sceneFunc Shape (animT boil); every other drawable tool is a Line
+      // whose points are swapped per frame.
       if (tool === 'brush') {
         const node = liveShapeRef.current;
-        if (node) registerLive(node, null);
+        if (node) registerLive(node, true);
       } else {
         const node = liveLineRef.current;
-        if (node) registerLive(node, livePointsRef);
+        if (node) registerLive(node, false);
       }
     } else {
       unregisterLive();
@@ -801,6 +828,7 @@ export function DrawingStage({
     if (
       tool !== 'pen' &&
       tool !== 'brush' &&
+      tool !== 'marker' &&
       tool !== 'eraser' &&
       tool !== 'rect' &&
       tool !== 'circle' &&
@@ -814,12 +842,9 @@ export function DrawingStage({
       descriptorFromLive({ type, points: livePoints, color, strokeWidth }),
       {
         listening: false,
-        ref:
-          tool === 'brush'
-            ? liveShapeCb
-            : tool === 'pen'
-              ? liveLineCb
-              : undefined,
+        // brush is the only sceneFunc Shape; every other drawable tool is a Line, so its
+        // live node goes to liveLineCb to be boiled via points-swap.
+        ref: tool === 'brush' ? liveShapeCb : liveLineCb,
       },
     );
   };
@@ -862,13 +887,20 @@ export function DrawingStage({
           onTouchEnd={handleTouchEnd}
           style={{ cursor }}
         >
+          {/* Background layer: markers only. Sits behind the main layer and the eraser's
+              destination-out can't reach it, so markers are always behind everything and
+              never erased. */}
+          <Layer ref={bgLayerRef}>
+            {strokes.filter((s) => s.type === 'marker').map(renderStroke)}
+            {!disabled && tool === 'marker' && renderLiveStroke()}
+          </Layer>
           <Layer ref={layerRef}>
-            {strokes.map(renderStroke)}
+            {strokes.filter((s) => s.type !== 'marker').map(renderStroke)}
             {remoteStrokes &&
               Object.entries(remoteStrokes).map(([uid, s]) =>
                 renderRemoteLiveStroke(uid, s),
               )}
-            {!disabled && renderLiveStroke()}
+            {!disabled && tool !== 'marker' && renderLiveStroke()}
             {/* Create-only overlay: a brand-new box (active.id === null) has no committed
                 stroke yet, so it has no draggable Group of its own — render the same
                 BoxControls a committed box draws (see TextBoxNode), in a Group transformed
