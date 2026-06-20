@@ -20,6 +20,17 @@ export interface ActiveBox {
   initial: string
 }
 
+// The single ACTIVE Sticker — the one being selected, dragged, or resized.
+//   id === null -> just placed, waiting for Firebase to assign an id
+export interface ActiveSticker {
+  id: string | null
+  x: number
+  y: number
+  width: number
+  height: number
+  rotation: number
+}
+
 // Transient geometry while resizing a box in a MULTI-selection — overrides the box's
 // stored geometry so it reflows live until the persisted stroke catches up.
 export interface XformBox {

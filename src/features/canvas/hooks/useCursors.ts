@@ -14,6 +14,9 @@ export function useCursors(
 ) {
   const [cursors, setCursors] = useState<Record<string, CursorPos>>({})
   const lastEmitRef = useRef(0)
+  const posRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
+  const marqueeRef = useRef<{ x0: number; y0: number; x1: number; y1: number } | null>(null)
+  const selectedIdsRef = useRef<string[] | null>(null)
   const cursorRef = useMemo(() => ref(rtdb, `canvases/${canvasId}/cursors/${uid}`), [canvasId, uid])
   const cursorsRef = useMemo(() => ref(rtdb, `canvases/${canvasId}/cursors`), [canvasId])
 
@@ -34,16 +37,36 @@ export function useCursors(
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canvasId, uid])
 
+  const buildPayload = (x: number, y: number): CursorPos => ({
+    x, y, color, tool, strokeWidth,
+    ...(marqueeRef.current ? { marquee: marqueeRef.current } : {}),
+    ...(selectedIdsRef.current ? { selectedIds: selectedIdsRef.current } : {}),
+  })
+
   const emitCursor = useCallback((x: number, y: number) => {
+    posRef.current = { x, y }
     const now = Date.now()
     if (now - lastEmitRef.current < THROTTLE_MS) return
     lastEmitRef.current = now
-    set(cursorRef, { x, y, color, tool, strokeWidth })
+    set(cursorRef, buildPayload(x, y))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cursorRef, color, tool, strokeWidth])
+
+  const updateSelection = useCallback((sel: {
+    marquee?: { x0: number; y0: number; x1: number; y1: number } | null
+    selectedIds?: string[] | null
+  }) => {
+    if ('marquee' in sel) marqueeRef.current = sel.marquee ?? null
+    if ('selectedIds' in sel) selectedIdsRef.current = sel.selectedIds ?? null
+    set(cursorRef, buildPayload(posRef.current.x, posRef.current.y))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cursorRef, color, tool, strokeWidth])
 
   const clearCursor = useCallback(() => {
+    marqueeRef.current = null
+    selectedIdsRef.current = null
     remove(cursorRef)
   }, [cursorRef])
 
-  return { cursors, emitCursor, clearCursor }
+  return { cursors, emitCursor, updateSelection, clearCursor }
 }

@@ -1,4 +1,4 @@
-export type ToolType = 'pen' | 'brush' | 'marker' | 'eraser' | 'rect' | 'circle' | 'line' | 'text' | 'hand' | 'select'
+export type ToolType = 'pen' | 'brush' | 'marker' | 'eraser' | 'rect' | 'circle' | 'line' | 'text' | 'sticker' | 'hand' | 'select'
 
 export interface UserDoc {
   email: string
@@ -35,6 +35,7 @@ export interface StrokeData {
   text?: string
   fontSize?: number
   rotation?: number
+  stickerId?: string
   stroke?: string
   strokeWidth?: number
   fill?: string
@@ -43,7 +44,7 @@ export interface StrokeData {
 
 export interface Stroke {
   id: string
-  type: 'path' | 'brush' | 'marker' | 'rect' | 'circle' | 'line' | 'text' | 'eraser'
+  type: 'path' | 'brush' | 'marker' | 'rect' | 'circle' | 'line' | 'text' | 'sticker' | 'eraser'
   authorId: string
   data: StrokeData
   timestamp: number
@@ -55,6 +56,8 @@ export interface CursorPos {
   color: string
   tool?: ToolType // the friend's active tool, so their cursor shows what they're holding
   strokeWidth?: number // their effective stroke size, to size the tool-footprint cursor
+  marquee?: { x0: number; y0: number; x1: number; y1: number } // live rubber-band while friend is dragging a selection
+  selectedIds?: string[] // IDs of text boxes the friend has multi-selected (2+)
 }
 
 // A friend's live focus on a Text Box: which box they have selected or are editing, and (while

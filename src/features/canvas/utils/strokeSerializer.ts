@@ -3,6 +3,7 @@ import { simplifyPoints } from './simplifyPoints'
 
 export const MIN_TEXT_WIDTH = 200
 export const MIN_TEXT_HEIGHT = 80
+export const MIN_STICKER_SIZE = 120
 
 // Freehand tools sample a point on every mousemove — hundreds of near-collinear vertices for
 // one stroke. tension splines, per-vertex boil variants, and Firebase payloads all scale with
@@ -57,6 +58,19 @@ export function buildStrokeData(
       radiusY: Math.abs(y2 - y) / 2,
       stroke: color,
       strokeWidth,
+    }
+  }
+  if (tool === 'sticker') {
+    const [x, y] = points
+    const size = 120
+    return {
+      x: x - size / 2,
+      y: y - size / 2,
+      width: size,
+      height: size,
+      rotation: 0,
+      stickerId: extra?.stickerId ?? 'flower',
+      stroke: color,
     }
   }
   if (tool === 'text') {

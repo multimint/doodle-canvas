@@ -96,27 +96,77 @@ export function computeResize(
   px: number,
   py: number,
   b: Box,
+  minW = MIN_TEXT_WIDTH,
+  minH = MIN_TEXT_HEIGHT,
 ): Box {
   let left = b.x,
     right = b.x + b.width,
     top = b.y,
     bottom = b.y + b.height
-  if (role.includes('w')) left = Math.min(px, right - MIN_TEXT_WIDTH)
-  if (role.includes('e')) right = Math.max(px, left + MIN_TEXT_WIDTH)
-  if (role.includes('n')) top = Math.min(py, bottom - MIN_TEXT_HEIGHT)
-  if (role.includes('s')) bottom = Math.max(py, top + MIN_TEXT_HEIGHT)
+  if (role.includes('w')) left = Math.min(px, right - minW)
+  if (role.includes('e')) right = Math.max(px, left + minW)
+  if (role.includes('n')) top = Math.min(py, bottom - minH)
+  if (role.includes('s')) bottom = Math.max(py, top + minH)
   return { x: left, y: top, width: right - left, height: bottom - top }
 }
 
 export type RotBox = Box & { rotation: number }
 
+// Constrain nb (in local box frame) to maintain width/height ratio.
+// Called after computeResize so anchor corners are already baked into nb.
+function applyAspectLock(
+  role: HandleRole,
+  nb: Box,
+  ratio: number,
+  baseMinW = MIN_TEXT_WIDTH,
+  baseMinH = MIN_TEXT_HEIGHT,
+): Box {
+  // Ratio-aware floor: both baseMinW and baseMinH must hold simultaneously.
+  const minW = Math.max(baseMinW, baseMinH * ratio)
+  const minH = Math.max(baseMinH, baseMinW / ratio)
+
+  if (role === 'n' || role === 's') {
+    const newH = Math.max(nb.height, minH)
+    const newW = newH * ratio
+    const cx = nb.x + nb.width / 2
+    return { x: cx - newW / 2, y: nb.y, width: newW, height: newH }
+  }
+  if (role === 'e' || role === 'w') {
+    const newW = Math.max(nb.width, minW)
+    const newH = newW / ratio
+    const cy = nb.y + nb.height / 2
+    return { x: nb.x, y: cy - newH / 2, width: newW, height: newH }
+  }
+  // Corner: project (nb.width, nb.height) onto the aspect-ratio diagonal (ratio, 1),
+  // then clamp so both MIN constraints are satisfied at the correct ratio.
+  const scale = Math.max(
+    (nb.width * ratio + nb.height) / (ratio * ratio + 1),
+    minW / ratio,
+    minH,
+  )
+  const newW = scale * ratio
+  const newH = scale
+  const anchorX = role.includes('w') ? nb.x + nb.width : nb.x
+  const anchorY = role.includes('n') ? nb.y + nb.height : nb.y
+  return {
+    x: role.includes('w') ? anchorX - newW : anchorX,
+    y: role.includes('n') ? anchorY - newH : anchorY,
+    width: newW,
+    height: newH,
+  }
+}
+
 // Given a resize handle role, the box's fixed start frame (st), and the world pointer,
 // return the box's new world geometry. Unrotate pointer -> resize in local frame ->
 // re-rotate the new centre back to world. Shared by single- and multi-select handles.
+// lockAspect: false = free resize, true = lock to st.width/st.height, number = lock to that exact ratio
 export function resizeFromPointer(
   role: HandleRole,
   st: RotBox,
   wp: { x: number; y: number },
+  lockAspect: boolean | number = false,
+  minW = MIN_TEXT_WIDTH,
+  minH = MIN_TEXT_HEIGHT,
 ): RotBox {
   const cx = st.x + st.width / 2,
     cy = st.y + st.height / 2
@@ -131,7 +181,11 @@ export function resizeFromPointer(
     width: st.width,
     height: st.height,
   }
-  const nb = computeResize(role, lx, ly, base)
+  let nb = computeResize(role, lx, ly, base, minW, minH)
+  if (lockAspect !== false) {
+    const ratio = typeof lockAspect === 'number' ? lockAspect : st.width / st.height
+    nb = applyAspectLock(role, nb, ratio, minW, minH)
+  }
   const ocx = nb.x + nb.width / 2,
     ocy = nb.y + nb.height / 2
   const wcx = cx + (ocx * Math.cos(rad) - ocy * Math.sin(rad))

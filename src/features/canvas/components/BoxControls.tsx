@@ -24,6 +24,8 @@ export function BoxControls({
   geom,
   onChange,
   onCommit,
+  lockAspect = false as boolean | number,
+  minSize,
 }: {
   w: number
   h: number
@@ -34,6 +36,8 @@ export function BoxControls({
   geom: RotBox
   onChange: (p: Partial<RotBox>) => void
   onCommit: () => void
+  lockAspect?: boolean | number
+  minSize?: number
 }) {
   const hs = 11 / zoom
   const rotGap = 26 / zoom
@@ -156,7 +160,7 @@ export function BoxControls({
               const st = handleStartRef.current
               const wp = stageRef.current?.getRelativePointerPosition()
               if (!st || !wp) return
-              const nb = resizeFromPointer(role, st, wp)
+              const nb = resizeFromPointer(role, st, wp, lockAspect, minSize, minSize)
               onChange({
                 x: nb.x,
                 y: nb.y,

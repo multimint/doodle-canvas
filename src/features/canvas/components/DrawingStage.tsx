@@ -1,8 +1,20 @@
-import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
+import React, {
+  useRef,
+  useState,
+  useCallback,
+  useEffect,
+  useMemo,
+} from 'react';
 import { Stage, Layer, Rect, Group } from 'react-konva';
 import type Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
-import type { Stroke, StrokeData, ToolType, TextFocus } from '../../../lib/types';
+import type {
+  Stroke,
+  StrokeData,
+  ToolType,
+  TextFocus,
+  CursorPos,
+} from '../../../lib/types';
 import {
   buildStrokeData,
   MIN_TEXT_WIDTH,
@@ -26,10 +38,11 @@ import { WiggleFilters } from './WiggleFilters';
 import { RemoteTextFocus } from './RemoteTextFocus';
 import { RemoteTextCaret } from './RemoteTextCaret';
 import { TextBoxNode } from './TextBoxNode';
+import { StickerNode } from './StickerNode';
 import { BoxControls } from './BoxControls';
 import { MultiSelectOverlay } from './MultiSelectOverlay';
 import { TextBoxEditor } from './TextBoxEditor';
-import type { ActiveBox, XformBox } from './textBoxTypes';
+import type { ActiveBox, XformBox, ActiveSticker } from './textBoxTypes';
 import { useViewport } from '../hooks/useViewport';
 import { cursorForTool } from '../utils/cursorForTool';
 import { usesToolCursor } from '../utils/toolCursor';
@@ -62,11 +75,31 @@ interface Props {
   remoteStrokes?: Record<string, LiveStroke>;
   onLiveUpdate?: (stroke: LiveStroke | null) => void;
   wiggle?: boolean;
+  selectedSticker?: string;
   // Friends' live Text Box focus (keyed by uid): which box they're on, editing flag, live text.
   remoteTextFocus?: Record<string, TextFocus>;
   // Report THIS client's Text Box focus so friends can see it (boxId null = no box / cleared).
-  onTextFocus?: (boxId: string | null, editing: boolean, text?: string, caret?: number) => void;
+  onTextFocus?: (
+    boxId: string | null,
+    editing: boolean,
+    text?: string,
+    caret?: number,
+  ) => void;
   displayNames?: Record<string, string>;
+  // Friends' cursor positions including marquee / multi-select state, keyed by uid.
+  friendCursors?: Record<string, CursorPos>;
+  // Report THIS client's selection state so friends can see the rubber-band and selected boxes.
+  onSelectionChange?: (sel: {
+    marquee?: { x0: number; y0: number; x1: number; y1: number } | null;
+    selectedIds?: string[] | null;
+  }) => void;
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
 }
 
 export function DrawingStage({
@@ -89,10 +122,18 @@ export function DrawingStage({
   remoteStrokes,
   onLiveUpdate,
   wiggle = true,
+  selectedSticker = 'flower',
   remoteTextFocus,
   onTextFocus,
   displayNames,
+  friendCursors,
+  onSelectionChange,
 }: Props) {
+  const onSelectionChangeRef = useRef(onSelectionChange);
+  useEffect(() => {
+    onSelectionChangeRef.current = onSelectionChange;
+  }, [onSelectionChange]);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const layerRef = useRef<Konva.Layer>(null);
   // Markers render on their own layer behind the main one. The eraser uses destination-out
@@ -132,6 +173,9 @@ export function DrawingStage({
   //   editing === false      -> just selected (Konva text visible, handles shown)
   // x/y/width/height are the UNROTATED top-left frame; rotation in degrees.
   const [active, setActive] = useState<ActiveBox | null>(null);
+  const [activeSticker, setActiveSticker] = useState<ActiveSticker | null>(
+    null,
+  );
   // Transient geometry while resizing a box in a MULTI-selection — overrides the
   // box's stored geometry so it reflows live. Cleared once the persisted stroke
   // catches up (see reconcile effect below). Single-box transforms write `active`.
@@ -171,10 +215,12 @@ export function DrawingStage({
   // Clear every selection state (single + multi). Used on empty-canvas click / tool change.
   const clearSelection = useCallback(() => {
     setActive(null);
+    setActiveSticker(null);
     setXform(null);
     setMultiIds([]);
     setMultiRect(null);
     setMultiOffset(null);
+    onSelectionChangeRef.current?.({ marquee: null, selectedIds: null });
   }, []);
 
   // Pending-commit: keep live line visible until the committed stroke arrives from Firebase
@@ -222,32 +268,23 @@ export function DrawingStage({
     registerLive,
     unregisterLive,
     setFrozenText,
+    markStrokesDirty,
   } = useWiggle(layerRef, wiggle);
 
-  // Viewport culling: the visible canvas rect in world coords (stage x/y = pan, scale = zoom),
-  // padded by 10% so strokes mount just before they scroll into view rather than popping in.
-  // Strokes outside this rect are dropped from the scene entirely, so they cost nothing to draw
-  // or boil — the dominant win once a board accumulates many strokes. Recomputed on pan/zoom
-  // because applyViewport setState-s both. Null until the container has been measured.
-  const cullRect = useMemo<AABB | null>(() => {
-    if (!containerSize.w || !containerSize.h) return null;
-    const left = -pan.x / zoom;
-    const top = -pan.y / zoom;
-    const right = (containerSize.w - pan.x) / zoom;
-    const bottom = (containerSize.h - pan.y) / zoom;
-    const padX = (right - left) * 0.1;
-    const padY = (bottom - top) * 0.1;
-    return { minX: left - padX, minY: top - padY, maxX: right + padX, maxY: bottom + padY };
-  }, [pan.x, pan.y, zoom, containerSize.w, containerSize.h]);
-
-  const inView = useCallback(
-    (s: Stroke) => {
-      if (!cullRect) return true;
-      const b = strokeBounds(s); // null for text/unknown → never culled
-      return b ? aabbOverlap(cullRect, b) : true;
-    },
-    [cullRect],
-  );
+  // Fix 2: mark dirty during render (before any layout effects fire) when strokes changed
+  // or wiggle was just enabled, so useLayoutEffect knows to re-apply jitter for any node
+  // points reset by react-konva reconciliation. Non-stroke renders (tool change, color, etc.)
+  // leave the flag false — skipping 2000 × node.points() mutations for nothing.
+  const _prevStrokesRef = useRef(strokes);
+  const _prevWiggleRef = useRef(wiggle);
+  if (
+    _prevStrokesRef.current !== strokes ||
+    (_prevWiggleRef.current !== wiggle && wiggle)
+  ) {
+    _prevStrokesRef.current = strokes;
+    _prevWiggleRef.current = wiggle;
+    markStrokesDirty();
+  }
 
   // Stable ref callbacks keyed by stroke ID — prevents unregister/register churn on every re-render
   const refCacheRef = useRef<Map<string, (node: Konva.Node | null) => void>>(
@@ -351,6 +388,20 @@ export function DrawingStage({
       setLivePoints(pts);
       return;
     }
+    if (tool === 'sticker') {
+      const { x, y } = getPos();
+      const data = buildStrokeData('sticker', [x, y], color, strokeWidth, {
+        stickerId: selectedSticker,
+      });
+      onStrokeComplete({
+        type: 'sticker',
+        authorId: '',
+        data,
+        timestamp: Date.now(),
+      });
+      onToolChange?.('select');
+      return;
+    }
     pendingCommitRef.current = false; // new stroke starts — cancel any held live line
     isDrawing.current = true;
     const { x, y } = getPos();
@@ -394,6 +445,7 @@ export function DrawingStage({
     if (isMarquee.current && marqueeRef.current) {
       marqueeRef.current = { ...marqueeRef.current, x1: x, y1: y };
       setMarquee(marqueeRef.current);
+      onSelectionChangeRef.current?.({ marquee: marqueeRef.current });
       return;
     }
 
@@ -449,7 +501,9 @@ export function DrawingStage({
         return;
       }
       const hits = strokes.filter(
-        (s) => s.type === 'text' && aabbOverlap(box, textAABB(s.data)),
+        (s) =>
+          (s.type === 'text' || s.type === 'sticker') &&
+          aabbOverlap(box, textAABB(s.data)),
       );
       if (hits.length === 0) {
         clearSelection();
@@ -473,6 +527,7 @@ export function DrawingStage({
           strokeWidth,
           initial: d.text ?? '',
         });
+        onSelectionChangeRef.current?.({ marquee: null, selectedIds: null });
         return;
       }
       // 2+ hits -> group selection (move + delete only).
@@ -498,6 +553,10 @@ export function DrawingStage({
         height: u.maxY - u.minY,
       });
       setMultiOffset(null);
+      onSelectionChangeRef.current?.({
+        marquee: null,
+        selectedIds: hits.map((s) => s.id),
+      });
       return;
     }
     // Tool switched to 'hand' mid-stroke — abandon without committing
@@ -637,6 +696,16 @@ export function DrawingStage({
     [active, onStrokeComplete, onUpdateStroke, onDeleteStroke, onToolChange],
   );
 
+  // Wrap setActiveSticker so selecting a sticker always clears the text-box selection.
+  const selectStickerStroke = useCallback((s: ActiveSticker) => {
+    setActive(null);
+    setXform(null);
+    setMultiIds([]);
+    setMultiRect(null);
+    setMultiOffset(null);
+    setActiveSticker(s);
+  }, []);
+
   // Select a Text Box in idle mode, capturing its current bounds for the outline.
   // Nodes render around their centre (offsetX/Y = half size), so the unrotated
   // top-left is node position minus offset.
@@ -644,6 +713,7 @@ export function DrawingStage({
   // draggable Group now, so we read geometry from `data` rather than node attrs.
   const selectStroke = useCallback(
     (s: Stroke) => {
+      setActiveSticker(null);
       setMultiIds([]);
       setMultiRect(null);
       setMultiOffset(null); // single-select replaces any group
@@ -698,10 +768,12 @@ export function DrawingStage({
   useEffect(() => {
     if (tool === 'select') return;
     setActive((prev) => (prev && prev.editing ? prev : null));
+    setActiveSticker(null);
     setXform(null);
     setMultiIds([]);
     setMultiRect(null);
     setMultiOffset(null);
+    onSelectionChangeRef.current?.({ marquee: null, selectedIds: null });
   }, [tool]);
 
   // Hide the follower across tool changes so it never flashes at the stage origin before
@@ -738,7 +810,10 @@ export function DrawingStage({
   }, [remoteTextFocus]);
   const remoteFocusList = useMemo(
     () =>
-      Object.entries(remoteTextFocus ?? {}).map(([uid, focus]) => ({ uid, focus })),
+      Object.entries(remoteTextFocus ?? {}).map(([uid, focus]) => ({
+        uid,
+        focus,
+      })),
     [remoteTextFocus],
   );
 
@@ -783,11 +858,12 @@ export function DrawingStage({
     }
   }, [strokes, xform]);
 
-  // Delete/Backspace removes the selected Text Box(es) — but not while typing in any
-  // field (topbar title rename is an <input>, the editor is a <textarea>).
+  // Delete/Backspace removes the selected Text Box(es) or sticker — but not while
+  // typing in any field (topbar title rename is an <input>, the editor is a <textarea>).
   useEffect(() => {
     const single = active && !active.editing && active.id ? active.id : null;
-    if (!single && multiIds.length === 0) return;
+    const singleSticker = activeSticker?.id ?? null;
+    if (!single && !singleSticker && multiIds.length === 0) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Delete' && e.key !== 'Backspace') return;
       const t = e.target;
@@ -799,6 +875,9 @@ export function DrawingStage({
         setMultiIds([]);
         setMultiRect(null);
         setMultiOffset(null);
+      } else if (singleSticker) {
+        onDeleteStroke(singleSticker);
+        setActiveSticker(null);
       } else if (single) {
         onDeleteStroke(single);
         setActive(null);
@@ -806,7 +885,7 @@ export function DrawingStage({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [active, multiIds, onDeleteStroke]);
+  }, [active, activeSticker, multiIds, onDeleteStroke]);
 
   const renderStroke = (stroke: Stroke) => {
     if (stroke.type === 'text') {
@@ -828,6 +907,22 @@ export function DrawingStage({
           openEditExisting={openEditExisting}
           onUpdateStroke={onUpdateStroke}
           remoteText={remoteEditText[stroke.id]}
+        />
+      );
+    }
+    if (stroke.type === 'sticker') {
+      return (
+        <StickerNode
+          key={stroke.id}
+          stroke={stroke}
+          tool={tool}
+          zoom={zoom}
+          activeSticker={activeSticker}
+          stageRef={stageRef}
+          handleStartRef={handleStartRef}
+          onSelect={selectStickerStroke}
+          setActiveSticker={setActiveSticker}
+          onUpdateStroke={onUpdateStroke}
         />
       );
     }
@@ -920,7 +1015,12 @@ export function DrawingStage({
       return null; // hand / select don't draw
     }
     const type: SimpleStrokeType = tool === 'pen' ? 'path' : tool;
-    const desc = descriptorFromLive({ type, points: livePoints, color, strokeWidth });
+    const desc = descriptorFromLive({
+      type,
+      points: livePoints,
+      color,
+      strokeWidth,
+    });
     // Capture the exact points renderShape will assign to the node — rect/circle trace
     // their outline, every other line uses its raw points — so the wiggle hook boils from
     // this clean geometry instead of reading back the jittered node.
@@ -930,17 +1030,13 @@ export function DrawingStage({
         : type === 'circle'
           ? ellipseToPerimeter(desc.x, desc.y, desc.radiusX, desc.radiusY)
           : desc.points;
-    return renderShape(
-      type,
-      desc,
-      {
-        listening: false,
-        live: true,
-        // brush is the only sceneFunc Shape; every other drawable tool is a Line, so its
-        // live node goes to liveLineCb to be boiled via points-swap.
-        ref: tool === 'brush' ? liveShapeCb : liveLineCb,
-      },
-    );
+    return renderShape(type, desc, {
+      listening: false,
+      live: true,
+      // brush is the only sceneFunc Shape; every other drawable tool is a Line, so its
+      // live node goes to liveLineCb to be boiled via points-swap.
+      ref: tool === 'brush' ? liveShapeCb : liveLineCb,
+    });
   };
 
   // Eraser masks for the marker layer. The eraser's destination-out only cuts the canvas of
@@ -952,7 +1048,12 @@ export function DrawingStage({
     if (tool !== 'eraser' || livePoints.length < 4) return null;
     return renderShape(
       'eraser',
-      descriptorFromLive({ type: 'eraser', points: livePoints, color, strokeWidth }),
+      descriptorFromLive({
+        type: 'eraser',
+        points: livePoints,
+        color,
+        strokeWidth,
+      }),
       { listening: false },
     );
   };
@@ -1006,7 +1107,7 @@ export function DrawingStage({
               over the hole and survives (a newer marker replaces an older erase). */}
           <Layer ref={bgLayerRef}>
             {strokes
-              .filter((s) => (s.type === 'marker' || s.type === 'eraser') && inView(s))
+              .filter((s) => s.type === 'marker' || s.type === 'eraser')
               .map((s) =>
                 s.type === 'marker'
                   ? renderStroke(s)
@@ -1021,14 +1122,25 @@ export function DrawingStage({
             {!disabled && renderEraserLiveMask()}
           </Layer>
           <Layer ref={layerRef}>
+            {/* Non-text/sticker strokes (pen, eraser, rect, etc.) rendered first so the
+                eraser's destination-out never cuts through text boxes or stickers. */}
             {strokes
-              .filter((s) => s.type !== 'marker' && inView(s))
+              .filter(
+                (s) =>
+                  s.type !== 'marker' &&
+                  s.type !== 'text' &&
+                  s.type !== 'sticker',
+              )
               .map(renderStroke)}
             {remoteStrokes &&
               Object.entries(remoteStrokes).map(([uid, s]) =>
                 renderRemoteLiveStroke(uid, s),
               )}
             {!disabled && tool !== 'marker' && renderLiveStroke()}
+            {/* Text and stickers always after erasers — immune to destination-out. */}
+            {strokes
+              .filter((s) => s.type === 'text' || s.type === 'sticker')
+              .map(renderStroke)}
             {/* Friends' live Text Box focus: coloured outline + name for the box each is
                 selecting/editing (their live text is mirrored via TextBoxNode above). */}
             <RemoteTextFocus
@@ -1121,6 +1233,54 @@ export function DrawingStage({
                 onUpdateStroke={onUpdateStroke}
               />
             )}
+            {/* Friends' rubber-band marquees and multi-select outlines */}
+            {friendCursors &&
+              Object.entries(friendCursors).map(([fuid, c]) => {
+                const elements: React.ReactNode[] = [];
+                if (c.marquee) {
+                  const { x0, y0, x1, y1 } = c.marquee;
+                  const mx = Math.min(x0, x1),
+                    my = Math.min(y0, y1);
+                  const mw = Math.abs(x1 - x0),
+                    mh = Math.abs(y1 - y0);
+                  elements.push(
+                    <Rect
+                      key={`fmarquee-${fuid}`}
+                      x={mx}
+                      y={my}
+                      width={mw}
+                      height={mh}
+                      stroke={c.color}
+                      strokeWidth={1.5 / zoom}
+                      dash={[6 / zoom, 3 / zoom]}
+                      fill={hexToRgba(c.color, 0.1)}
+                      listening={false}
+                    />,
+                  );
+                }
+                if (c.selectedIds && c.selectedIds.length >= 2) {
+                  c.selectedIds.forEach((id) => {
+                    const s = strokes.find((k) => k.id === id);
+                    if (!s) return;
+                    const a = textAABB(s.data);
+                    elements.push(
+                      <Rect
+                        key={`fsel-${fuid}-${id}`}
+                        x={a.minX}
+                        y={a.minY}
+                        width={a.maxX - a.minX}
+                        height={a.maxY - a.minY}
+                        stroke={c.color}
+                        strokeWidth={1.5 / zoom}
+                        dash={[5 / zoom, 3 / zoom]}
+                        fill='transparent'
+                        listening={false}
+                      />,
+                    );
+                  });
+                }
+                return elements;
+              })}
           </Layer>
         </Stage>
       )}

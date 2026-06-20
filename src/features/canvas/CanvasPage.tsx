@@ -60,7 +60,8 @@ export function CanvasPage() {
   const [tool, setTool] = useState<ToolType>('pen')
   const [color, setColor] = useState('#14151c')
   const [strokeWidth, setStrokeWidth] = useState(6)
-  const [wiggle] = useState(true)
+  const [wiggle, setWiggle] = useState(true)
+  const [selectedSticker, setSelectedSticker] = useState('flower')
 
   // The eraser paints (and its cursor ring shows) at a multiple of the chosen size. This
   // flows to the committed eraser stroke, its follower cursor, AND the cursor broadcast to
@@ -95,7 +96,7 @@ export function CanvasPage() {
   }, [canvasId, canvasDoc?.ownerId, uid])
 
   const { strokes, atCap, addStroke, updateStroke, deleteStroke, clearAllStrokes } = useStrokes(canvasId!)
-  const { cursors, emitCursor, clearCursor } = useCursors(canvasId!, uid, userColor, tool, effectiveStrokeWidth)
+  const { cursors, emitCursor, updateSelection, clearCursor } = useCursors(canvasId!, uid, userColor, tool, effectiveStrokeWidth)
   const { remoteFocus: remoteTextFocus, setTextFocus } = useTextPresence(canvasId!, uid, userColor)
   const { remoteStrokes, emitLiveStroke, clearLiveStroke } = useLiveStrokes(canvasId!, uid)
   const { presence } = usePresence({
@@ -229,6 +230,8 @@ export function CanvasPage() {
         onUndo={handleUndo}
         onRedo={handleRedo}
         onShare={() => setShowInvite(true)}
+        wiggle={wiggle}
+        onWiggleToggle={() => setWiggle(w => !w)}
       />
 
       {/* Guest banner */}
@@ -281,9 +284,11 @@ export function CanvasPage() {
             tool={tool}
             color={color}
             strokeWidth={strokeWidth}
+            selectedSticker={selectedSticker}
             onToolChange={setTool}
             onColorChange={setColor}
             onStrokeWidthChange={setStrokeWidth}
+            onStickerChange={setSelectedSticker}
             onClear={handleClearCanvas}
           />
         )}
@@ -320,9 +325,12 @@ export function CanvasPage() {
             remoteStrokes={remoteStrokes}
             onLiveUpdate={handleLiveUpdate}
             wiggle={wiggle}
+            selectedSticker={selectedSticker}
             remoteTextFocus={remoteTextFocus}
             onTextFocus={setTextFocus}
             displayNames={displayNames}
+            friendCursors={cursors}
+            onSelectionChange={updateSelection}
           />
           {!isMobile && (
             <>
@@ -337,9 +345,11 @@ export function CanvasPage() {
             tool={tool}
             color={color}
             strokeWidth={strokeWidth}
+            selectedSticker={selectedSticker}
             onToolChange={setTool}
             onColorChange={setColor}
             onStrokeWidthChange={setStrokeWidth}
+            onStickerChange={setSelectedSticker}
             onClear={handleClearCanvas}
             horizontal
           />
