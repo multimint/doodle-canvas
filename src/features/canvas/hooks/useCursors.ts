@@ -5,7 +5,13 @@ import type { CursorPos, ToolType } from '../../../lib/types'
 
 const THROTTLE_MS = 50
 
-export function useCursors(canvasId: string, uid: string, color: string, tool: ToolType) {
+export function useCursors(
+  canvasId: string,
+  uid: string,
+  color: string,
+  tool: ToolType,
+  strokeWidth: number,
+) {
   const [cursors, setCursors] = useState<Record<string, CursorPos>>({})
   const lastEmitRef = useRef(0)
   const cursorRef = useMemo(() => ref(rtdb, `canvases/${canvasId}/cursors/${uid}`), [canvasId, uid])
@@ -32,8 +38,8 @@ export function useCursors(canvasId: string, uid: string, color: string, tool: T
     const now = Date.now()
     if (now - lastEmitRef.current < THROTTLE_MS) return
     lastEmitRef.current = now
-    set(cursorRef, { x, y, color, tool })
-  }, [cursorRef, color, tool])
+    set(cursorRef, { x, y, color, tool, strokeWidth })
+  }, [cursorRef, color, tool, strokeWidth])
 
   const clearCursor = useCallback(() => {
     remove(cursorRef)

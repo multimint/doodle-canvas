@@ -326,6 +326,10 @@ export function DrawingStage({
 
   const handleMouseMove = (e: KonvaEventObject<MouseEvent>) => {
     if (tool === 'hand') {
+      // Broadcast the cursor so friends still see the hand tool (and its pointer) even while
+      // panning — otherwise the hand tool emits nothing and the remote cursor disappears.
+      const p = getPos();
+      onMouseMove(p.x, p.y);
       if (!isPanning.current) return;
       const dx = e.evt.clientX - lastClientPos.current.x;
       const dy = e.evt.clientY - lastClientPos.current.y;

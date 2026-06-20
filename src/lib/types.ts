@@ -54,6 +54,7 @@ export interface CursorPos {
   y: number
   color: string
   tool?: ToolType // the friend's active tool, so their cursor shows what they're holding
+  strokeWidth?: number // their effective stroke size, to size the tool-footprint cursor
 }
 
 export interface PresenceEntry {

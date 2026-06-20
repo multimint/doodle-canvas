@@ -325,13 +325,20 @@
 .remote-cursor {
   position: absolute;
   pointer-events: none;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
 }
 
+/* The friend's tool footprint reuses .tool-cursor (its `> span` children centre on the
+   anchor); the anchor IS the cursor point, so the footprint sits exactly under their pointer. */
+.remote-footprint {
+  z-index: 0;
+}
+
+/* Name (+ icon for non-drawing tools) offset to the lower-right so it never hides the point
+   or the footprint centre. */
 .cursor-label {
+  position: absolute;
+  left: 13px;
+  top: 11px;
   font-family: var(--ui);
   font-size: 11px;
   color: white;

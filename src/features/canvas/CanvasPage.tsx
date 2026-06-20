@@ -61,6 +61,13 @@ export function CanvasPage() {
   const [strokeWidth, setStrokeWidth] = useState(6)
   const [wiggle] = useState(true)
 
+  // The eraser paints (and its cursor ring shows) at a multiple of the chosen size. This
+  // flows to the committed eraser stroke, its follower cursor, AND the cursor broadcast to
+  // friends, so everyone sees the same footprint.
+  const ERASER_SCALE = 4
+  const effectiveStrokeWidth =
+    tool === 'eraser' ? strokeWidth * ERASER_SCALE : strokeWidth
+
   useEffect(() => { toolRef.current = tool }, [tool])
 
   useEffect(() => {
@@ -87,7 +94,7 @@ export function CanvasPage() {
   }, [canvasId, canvasDoc?.ownerId, uid])
 
   const { strokes, atCap, addStroke, updateStroke, deleteStroke, clearAllStrokes } = useStrokes(canvasId!)
-  const { cursors, emitCursor, clearCursor } = useCursors(canvasId!, uid, userColor, tool)
+  const { cursors, emitCursor, clearCursor } = useCursors(canvasId!, uid, userColor, tool, effectiveStrokeWidth)
   const { remoteStrokes, emitLiveStroke, clearLiveStroke } = useLiveStrokes(canvasId!, uid)
   const { presence } = usePresence({
     canvasId: canvasId!,
@@ -131,12 +138,6 @@ export function CanvasPage() {
       }
     }
   }, [canvasId])
-
-  // The eraser clears a noticeably larger area than the pens/shapes draw — 4x the chosen
-  // size. This flows to both the committed eraser stroke and its follower cursor ring.
-  const ERASER_SCALE = 4
-  const effectiveStrokeWidth =
-    tool === 'eraser' ? strokeWidth * ERASER_SCALE : strokeWidth
 
   // Mouse-wheel resize from DrawingStage: step the base size (never the eraser-scaled
   // value) so the eraser keeps its 4x footprint relative to the chosen size.
