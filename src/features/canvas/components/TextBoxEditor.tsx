@@ -23,6 +23,8 @@ interface TextBoxEditorProps {
   selectAllOnFocus?: boolean
   onCommit: (text: string) => void
   onCancel: () => void
+  // Streams the live text on every keystroke so collaborators see it as it's typed.
+  onChange?: (text: string) => void
 }
 
 // The DOM textarea that overlays a Text Box during editing. The caret must sit on the
@@ -40,6 +42,7 @@ export function TextBoxEditor({
   selectAllOnFocus,
   onCommit,
   onCancel,
+  onChange,
 }: TextBoxEditorProps) {
   const [value, setValue] = useState(initial)
   // A textarea can't CSS-center its own text, so instead size the element to the
@@ -128,6 +131,7 @@ export function TextBoxEditor({
       value={value}
       onChange={(e) => {
         setValue(e.target.value)
+        onChange?.(e.target.value)
         recenter()
       }}
       onKeyDown={(e) => {

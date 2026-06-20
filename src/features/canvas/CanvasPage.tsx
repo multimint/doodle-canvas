@@ -8,6 +8,7 @@ import { auth, db, rtdb } from '../../lib/firebase'
 import { useAuth } from '../auth/useAuth'
 import { useStrokes } from './hooks/useStrokes'
 import { useCursors } from './hooks/useCursors'
+import { useTextPresence } from './hooks/useTextPresence'
 import { usePresence } from './hooks/usePresence'
 import { useUndoStack } from './hooks/useUndoStack'
 import { useLiveStrokes } from './hooks/useLiveStrokes'
@@ -95,6 +96,7 @@ export function CanvasPage() {
 
   const { strokes, atCap, addStroke, updateStroke, deleteStroke, clearAllStrokes } = useStrokes(canvasId!)
   const { cursors, emitCursor, clearCursor } = useCursors(canvasId!, uid, userColor, tool, effectiveStrokeWidth)
+  const { remoteFocus: remoteTextFocus, setTextFocus } = useTextPresence(canvasId!, uid, userColor)
   const { remoteStrokes, emitLiveStroke, clearLiveStroke } = useLiveStrokes(canvasId!, uid)
   const { presence } = usePresence({
     canvasId: canvasId!,
@@ -318,6 +320,9 @@ export function CanvasPage() {
             remoteStrokes={remoteStrokes}
             onLiveUpdate={handleLiveUpdate}
             wiggle={wiggle}
+            remoteTextFocus={remoteTextFocus}
+            onTextFocus={setTextFocus}
+            displayNames={displayNames}
           />
           {!isMobile && (
             <>

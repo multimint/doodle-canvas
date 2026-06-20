@@ -57,6 +57,16 @@ export interface CursorPos {
   strokeWidth?: number // their effective stroke size, to size the tool-footprint cursor
 }
 
+// A friend's live focus on a Text Box: which box they have selected or are editing, and (while
+// editing) the text they're currently typing, so others see the box outlined + the text update
+// in real time.
+export interface TextFocus {
+  boxId: string
+  editing: boolean
+  color: string
+  text?: string
+}
+
 export interface PresenceEntry {
   displayName: string
   photoURL: string

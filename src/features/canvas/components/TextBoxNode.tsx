@@ -23,6 +23,9 @@ interface TextBoxNodeProps {
   selectStroke: (s: Stroke) => void
   openEditExisting: (s: Stroke) => void
   onUpdateStroke?: (id: string, patch: Partial<StrokeData>) => void
+  // Live text a friend is typing into this box right now (overrides the committed text so
+  // their keystrokes show in real time); undefined when no one remote is editing it.
+  remoteText?: string
 }
 
 // A single committed Text Box: a draggable Group at the box centre (rotated) whose
@@ -44,6 +47,7 @@ export function TextBoxNode({
   selectStroke,
   openEditExisting,
   onUpdateStroke,
+  remoteText,
 }: TextBoxNodeProps) {
   const { data } = stroke
   const isActive = active?.id === stroke.id
@@ -65,10 +69,12 @@ export function TextBoxNode({
   // so the caret sits on the very text it's editing.
   const editingThis = isActive && active!.editing
   const movable = tool === 'select' && !inMulti && !editingThis
-  // An empty box renders a faint "Text" placeholder: it keeps the box visible and gives
-  // the <Text> a hit area, so an emptied box stays selectable instead of vanishing.
-  const isEmpty = !data.text
-  const displayText = isEmpty ? 'Text' : data.text
+  // A friend's in-progress text (if any) overrides the committed text so their typing shows
+  // live; otherwise use the saved text. An empty box renders a faint "Text" placeholder: it
+  // keeps the box visible and gives the <Text> a hit area, so an emptied box stays selectable.
+  const baseText = remoteText ?? data.text
+  const isEmpty = !baseText
+  const displayText = isEmpty ? 'Text' : baseText
   const fillColor = isEmpty ? '#b8b8b8' : (data.fill ?? data.stroke)
   return (
     <Group

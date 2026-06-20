@@ -57,6 +57,14 @@
               ".validate": "newData.isNumber()"
             }
           }
+        },
+
+        "textFocus": {
+          "$uid": {
+            ".read": "auth != null && root.child('canvases/' + $canvasId + '/access/members/' + auth.uid).val() === true",
+            ".write": "auth != null && auth.uid === $uid && root.child('canvases/' + $canvasId + '/access/members/' + auth.uid).val() === true",
+            ".validate": "newData.hasChildren(['boxId', 'editing', 'color']) || !newData.exists()"
+          }
         }
       }
     }

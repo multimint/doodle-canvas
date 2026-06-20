@@ -1,8 +1,8 @@
-import { useRef, useState, useCallback, useEffect } from 'react';
+import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import { Stage, Layer, Rect, Group } from 'react-konva';
 import type Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
-import type { Stroke, StrokeData, ToolType } from '../../../lib/types';
+import type { Stroke, StrokeData, ToolType, TextFocus } from '../../../lib/types';
 import {
   buildStrokeData,
   MIN_TEXT_WIDTH,
@@ -22,6 +22,7 @@ import {
 } from '../render/strokeShapes';
 import { rectToPerimeter, ellipseToPerimeter } from '../utils/wiggleUtils';
 import { WiggleFilters } from './WiggleFilters';
+import { RemoteTextFocus } from './RemoteTextFocus';
 import { TextBoxNode } from './TextBoxNode';
 import { BoxControls } from './BoxControls';
 import { MultiSelectOverlay } from './MultiSelectOverlay';
@@ -59,6 +60,11 @@ interface Props {
   remoteStrokes?: Record<string, LiveStroke>;
   onLiveUpdate?: (stroke: LiveStroke | null) => void;
   wiggle?: boolean;
+  // Friends' live Text Box focus (keyed by uid): which box they're on, editing flag, live text.
+  remoteTextFocus?: Record<string, TextFocus>;
+  // Report THIS client's Text Box focus so friends can see it (boxId null = no box / cleared).
+  onTextFocus?: (boxId: string | null, editing: boolean, text?: string) => void;
+  displayNames?: Record<string, string>;
 }
 
 export function DrawingStage({
@@ -81,6 +87,9 @@ export function DrawingStage({
   remoteStrokes,
   onLiveUpdate,
   wiggle = true,
+  remoteTextFocus,
+  onTextFocus,
+  displayNames,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const layerRef = useRef<Konva.Layer>(null);
@@ -681,6 +690,42 @@ export function DrawingStage({
     setFrozenText(ids);
   }, [active?.id, multiIds, setFrozenText]);
 
+  // Broadcast which committed Text Box we have selected / are editing so friends see the
+  // outline. Selection + mode changes go out here; live keystrokes stream via the editor's
+  // onChange. A brand-new box (id === null) has no shared id yet, so it reports as "no box".
+  useEffect(() => {
+    onTextFocus?.(active?.id ?? null, !!active?.editing);
+  }, [active?.id, active?.editing, onTextFocus]);
+
+  // Friends' in-progress text keyed by the box they're editing (feeds TextBoxNode so their
+  // typing shows live), and the flat list of focuses to outline.
+  const remoteEditText = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const f of Object.values(remoteTextFocus ?? {})) {
+      if (f.editing && f.text != null) m[f.boxId] = f.text;
+    }
+    return m;
+  }, [remoteTextFocus]);
+  const remoteFocusList = useMemo(
+    () =>
+      Object.entries(remoteTextFocus ?? {}).map(([uid, focus]) => ({ uid, focus })),
+    [remoteTextFocus],
+  );
+
+  // While editing a Text Box, the editor textarea covers the canvas, so the stage stops
+  // firing mousemove and our cursor would freeze/vanish for friends. Track the pointer on the
+  // window instead and keep emitting our canvas-space position so our cursor stays live.
+  useEffect(() => {
+    if (!active?.editing) return;
+    const onMove = (e: MouseEvent) => {
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      onMouseMove((e.clientX - rect.left - pan.x) / zoom, (e.clientY - rect.top - pan.y) / zoom);
+    };
+    window.addEventListener('mousemove', onMove);
+    return () => window.removeEventListener('mousemove', onMove);
+  }, [active?.editing, pan.x, pan.y, zoom, onMouseMove]);
+
   // Konva measures/caches text with whatever font is available at draw time. If a Text
   // Box mounts before the doodle font (Patrick Hand) has loaded it renders in the
   // fallback and stays there until something redraws — so force one redraw once fonts
@@ -758,6 +803,7 @@ export function DrawingStage({
           selectStroke={selectStroke}
           openEditExisting={openEditExisting}
           onUpdateStroke={onUpdateStroke}
+          remoteText={remoteEditText[stroke.id]}
         />
       );
     }
@@ -916,7 +962,10 @@ export function DrawingStage({
           onContextMenu={handleContextMenu}
           onMouseLeave={() => {
             handleMouseUp();
-            onMouseLeave();
+            // While editing a box, the pointer leaving the stage usually just means it moved
+            // onto the editor textarea — keep our cursor alive (the window listener below keeps
+            // emitting) so friends still see us. Otherwise clear it at the canvas edge.
+            if (!active?.editing) onMouseLeave();
             setCursorVisible(false); // don't freeze the follower at the canvas edge
           }}
           onWheel={handleWheelOrResize}
@@ -955,6 +1004,14 @@ export function DrawingStage({
                 renderRemoteLiveStroke(uid, s),
               )}
             {!disabled && tool !== 'marker' && renderLiveStroke()}
+            {/* Friends' live Text Box focus: coloured outline + name for the box each is
+                selecting/editing (their live text is mirrored via TextBoxNode above). */}
+            <RemoteTextFocus
+              focuses={remoteFocusList}
+              strokes={strokes}
+              displayNames={displayNames ?? {}}
+              zoom={zoom}
+            />
             {/* Create-only overlay: a brand-new box (active.id === null) has no committed
                 stroke yet, so it has no draggable Group of its own — render the same
                 BoxControls a committed box draws (see TextBoxNode), in a Group transformed
@@ -1050,6 +1107,9 @@ export function DrawingStage({
           selectAllOnFocus={active.id === null}
           onCommit={handleEditingCommit}
           onCancel={() => setActive(null)}
+          onChange={(t) => {
+            if (active.id) onTextFocus?.(active.id, true, t);
+          }}
         />
       )}
 
