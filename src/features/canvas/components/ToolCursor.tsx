@@ -2,6 +2,7 @@ import { forwardRef } from 'react'
 import type { ToolType } from '../../../lib/types'
 import { toolCursorVariant } from '../utils/toolCursor'
 import { ToolFootprint } from './ToolFootprint'
+import { StickerPreview } from './StickerPreview'
 
 interface Props {
   tool: ToolType
@@ -9,6 +10,7 @@ interface Props {
   strokeWidth: number
   zoom: number
   visible: boolean
+  stickerId?: string
 }
 
 // A presentational follower that depicts the active tool's painted footprint at the
@@ -20,10 +22,11 @@ interface Props {
 // The moved root sits at the stage origin; the inner visual centres itself on that point
 // with translate(-50%, -50%), so the pointer maps to the true centre of the footprint.
 export const ToolCursor = forwardRef<HTMLDivElement, Props>(function ToolCursor(
-  { tool, color, strokeWidth, zoom, visible },
+  { tool, color, strokeWidth, zoom, visible, stickerId },
   ref,
 ) {
-  if (toolCursorVariant(tool) === 'none') return null
+  const variant = toolCursorVariant(tool)
+  if (variant === 'none') return null
 
   return (
     <div
@@ -31,12 +34,16 @@ export const ToolCursor = forwardRef<HTMLDivElement, Props>(function ToolCursor(
       className='tool-cursor'
       style={{ visibility: visible ? 'visible' : 'hidden' }}
     >
-      <ToolFootprint
-        tool={tool}
-        color={color}
-        strokeWidth={strokeWidth}
-        zoom={zoom}
-      />
+      {variant === 'sticker' ? (
+        <StickerPreview stickerId={stickerId ?? 'flower'} color={color} zoom={zoom} />
+      ) : (
+        <ToolFootprint
+          tool={tool}
+          color={color}
+          strokeWidth={strokeWidth}
+          zoom={zoom}
+        />
+      )}
     </div>
   )
 })

@@ -23,6 +23,10 @@ describe('toolCursorVariant', () => {
     expect(toolCursorVariant('circle')).toBe('crosshair')
   })
 
+  it('previews the stamp with a sticker follower', () => {
+    expect(toolCursorVariant('sticker')).toBe('sticker')
+  })
+
   it('has no follower for text / hand / select', () => {
     expect(toolCursorVariant('text')).toBe('none')
     expect(toolCursorVariant('hand')).toBe('none')
@@ -36,6 +40,7 @@ describe('usesToolCursor', () => {
     expect(usesToolCursor('marker')).toBe(true)
     expect(usesToolCursor('eraser')).toBe(true)
     expect(usesToolCursor('rect')).toBe(true)
+    expect(usesToolCursor('sticker')).toBe(true)
     expect(usesToolCursor('text')).toBe(false)
     expect(usesToolCursor('hand')).toBe(false)
     expect(usesToolCursor('select')).toBe(false)

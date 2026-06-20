@@ -14,9 +14,13 @@ export function CursorOverlay({ cursors, zoom, pan, displayNames }: Props) {
     <div className="cursor-overlay" style={{ pointerEvents: 'none' }}>
       {Object.entries(cursors).map(([uid, cursor]) => {
         // Drawing tools depict the actual painted footprint centred on the friend's point;
-        // non-drawing tools (select/hand/text) keep the arrow pointer + a tool icon.
+        // non-drawing tools (select/hand/text) keep the arrow pointer + a tool icon. Sticker is
+        // excluded: its preview needs the picked sticker id, which we don't broadcast, so a
+        // friend stamping keeps the plain arrow rather than an empty footprint.
         const hasFootprint =
-          !!cursor.tool && toolCursorVariant(cursor.tool) !== 'none'
+          !!cursor.tool &&
+          cursor.tool !== 'sticker' &&
+          toolCursorVariant(cursor.tool) !== 'none'
         return (
           <div
             key={uid}

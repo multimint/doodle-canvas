@@ -30,6 +30,7 @@ import {
   descriptorFromLive,
   type SimpleStrokeType,
 } from '../render/strokeDescriptor'
+import { hashStr } from '../utils/wiggleUtils'
 import { screenToWorld, viewportBounds } from '../engine/camera'
 import {
   applyCamera,
@@ -400,7 +401,9 @@ export function CanvasStage({
         if (s.type !== 'text' && s.type !== 'sticker') continue
         if (!isVisible(s, bounds)) continue
         if (s.type === 'sticker') {
-          drawStickerStroke(mctx, effData(s))
+          // Freeze the boil while this sticker is selected/grouped so its handles stay aligned.
+          const frozen = activeSticker?.id === s.id || multiIds.includes(s.id)
+          drawStickerStroke(mctx, effData(s), frame, wiggle && !frozen, hashStr(s.id))
           continue
         }
         // text
@@ -1304,6 +1307,7 @@ export function CanvasStage({
           strokeWidth={strokeWidth}
           zoom={cam.zoom}
           visible={cursorVisible}
+          stickerId={selectedSticker}
         />
       )}
 

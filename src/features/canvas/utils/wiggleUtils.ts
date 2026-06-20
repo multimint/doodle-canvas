@@ -76,6 +76,23 @@ export function nodeJitter(salt: number, frame: number): [number, number] {
   return [jrand(salt, frame, 7) * mag, jrand(salt, frame, 9) * mag]
 }
 
+// Per-frame whole-sticker boil: a small translate + rotate that hops between the 3 boil
+// frames, scaled to the sticker so big stamps shimmy proportionally. This is the reference
+// app's sticker wiggle, driven by the project's deterministic jrand instead of sin(frame),
+// so a sticker shakes in lockstep with the surrounding lines. Returns [dx, dy, dRot(rad)].
+export function stickerJitter(
+  salt: number,
+  frame: number,
+  size: number,
+): [number, number, number] {
+  const amp = Math.max(2, size * 0.05)
+  return [
+    jrand(salt, frame, 11) * amp,
+    jrand(salt, frame, 13) * amp,
+    jrand(salt, frame, 17) * 0.06,
+  ]
+}
+
 // ── Outline roughening ──────────────────────────────────────────────────────────────
 // Rect/circle have no points of their own, so to boil them we trace their outline as a
 // sampled polyline (vertices ~`step` apart) and let the same jitter machinery shake it.

@@ -399,6 +399,14 @@
   box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.9);
 }
 
+/* Sticker: a faded ghost of the selected sticker, previewing the stamp before it's placed. */
+.tool-cursor-sticker {
+  opacity: 0.6;
+}
+.tool-cursor-sticker canvas {
+  display: block;
+}
+
 /* Text tool input floats over Konva stage */
 .text-tool-input {
   position: absolute;

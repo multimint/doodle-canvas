@@ -64,7 +64,7 @@ export function drawCommitted(
     return
   }
   if (stroke.type === 'sticker') {
-    drawStickerStroke(ctx, stroke.data ?? {})
+    drawStickerStroke(ctx, stroke.data ?? {}, frame, wiggle, hashStr(stroke.id))
     return
   }
   drawSimpleStroke(

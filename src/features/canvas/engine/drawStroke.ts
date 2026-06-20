@@ -5,6 +5,7 @@ import {
   jitterMag,
   rectToPerimeter,
   ellipseToPerimeter,
+  stickerJitter,
 } from '../utils/wiggleUtils'
 import { sprayFor, drawSpray } from '../utils/sprayUtils'
 import { drawSticker } from '../render/stickerLibrary'
@@ -138,9 +139,14 @@ function squareGeom(x: number, y: number, w: number, h: number) {
 
 // Stamp a sticker: translate to its center, rotate, and draw from the sticker library at
 // half-size (the library draws centered at the origin). Matches the old StickerNode transform.
+// When `wiggle` is on it boils like every other stroke — a per-frame translate + tiny rotation
+// from stickerJitter (seeded by `salt`, the stroke id hash) so it shimmies in step with lines.
 export function drawStickerStroke(
   ctx: CanvasRenderingContext2D,
   data: StrokeData,
+  frame = 0,
+  wiggle = false,
+  salt = 0,
 ) {
   const { cx, cy, size } = squareGeom(
     data.x ?? 0,
@@ -150,7 +156,13 @@ export function drawStickerStroke(
   )
   ctx.save()
   ctx.translate(cx, cy)
-  ctx.rotate(((data.rotation ?? 0) * Math.PI) / 180)
+  let rot = ((data.rotation ?? 0) * Math.PI) / 180
+  if (wiggle) {
+    const [dx, dy, dRot] = stickerJitter(salt, frame, size)
+    ctx.translate(dx, dy)
+    rot += dRot
+  }
+  ctx.rotate(rot)
   drawSticker(ctx, data.stickerId ?? 'flower', size / 2, data.stroke ?? '#000000')
   ctx.restore()
 }

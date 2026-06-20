@@ -14,6 +14,7 @@ export type ToolCursorVariant =
   | 'marker' // marker: translucent rounded-square felt nib at the broad marker width
   | 'ring' // eraser: hollow ring, sized to the stroke (no color — it erases)
   | 'crosshair' // line / rect / circle: precise point + small color dot (size is the drag)
+  | 'sticker' // sticker: a ghost of the selected sticker, previewing the stamp before placing
   | 'none' // text / hand / select: no follower, keep the native cursor
 
 export function toolCursorVariant(tool: ToolType): ToolCursorVariant {
@@ -22,6 +23,7 @@ export function toolCursorVariant(tool: ToolType): ToolCursorVariant {
   if (tool === 'marker') return 'marker'
   if (tool === 'eraser') return 'ring'
   if (tool === 'line' || tool === 'rect' || tool === 'circle') return 'crosshair'
+  if (tool === 'sticker') return 'sticker'
   return 'none'
 }
 
