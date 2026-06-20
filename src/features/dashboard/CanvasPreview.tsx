@@ -53,7 +53,10 @@ export function CanvasPreview({ canvasId, accentColor = '#3d5afe' }: Props) {
     const k = stroke.id
     switch (stroke.type) {
       case 'path':
+      case 'brush':
         return <Line key={k} points={data.points ?? []} stroke={data.stroke} strokeWidth={data.strokeWidth} lineCap="round" lineJoin="round" tension={0.5} listening={false} />
+      case 'marker':
+        return <Line key={k} points={data.points ?? []} stroke={data.stroke} strokeWidth={(data.strokeWidth ?? 6) * 3} lineCap="round" lineJoin="round" tension={0.4} listening={false} />
       case 'eraser':
         return <Line key={k} points={data.points ?? []} stroke="rgba(0,0,0,1)" strokeWidth={data.strokeWidth} lineCap="round" lineJoin="round" tension={0.5} globalCompositeOperation="destination-out" listening={false} />
       case 'rect':
@@ -71,11 +74,16 @@ export function CanvasPreview({ canvasId, accentColor = '#3d5afe' }: Props) {
 
   const isEmpty = loaded && strokes.length === 0
 
+  const markerFirst = [
+    ...strokes.filter((s) => s.type === 'marker'),
+    ...strokes.filter((s) => s.type !== 'marker'),
+  ]
+
   return (
     <div ref={containerRef} style={{ width: '100%', aspectRatio: '16/9', overflow: 'hidden', background: 'transparent', position: 'relative' }}>
       {size.w > 0 && (
         <Stage width={size.w} height={size.h} scaleX={scale} scaleY={scale} listening={false}>
-          <Layer>{strokes.map(renderStroke)}</Layer>
+          <Layer>{markerFirst.map(renderStroke)}</Layer>
         </Stage>
       )}
       {isEmpty && (
