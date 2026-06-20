@@ -285,7 +285,18 @@ export function CanvasPage() {
           />
         )}
 
-        <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }} className="m-canvas-surface">
+        {/* The dot grid pans WITH the canvas (background-position follows the pan offset) but
+            keeps a fixed 26px spacing — background-size is not scaled by zoom, so the gap
+            between dots stays constant as you zoom in/out. */}
+        <div
+          style={{
+            flex: 1,
+            overflow: 'hidden',
+            position: 'relative',
+            backgroundPosition: `${viewport.pan.x}px ${viewport.pan.y}px`,
+          }}
+          className="m-canvas-surface"
+        >
           <DrawingStage
             strokes={strokes}
             tool={tool}
