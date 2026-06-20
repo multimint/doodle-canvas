@@ -28,7 +28,7 @@ export function useStrokes(canvasId: string) {
           // Text Boxes are mutable (move/edit) — bust the cache when their data
           // actually changed so the update renders. Other strokes are immutable,
           // so reuse the cached object (preserves the wiggle node optimization).
-          if (existing.type === 'text') {
+          if (existing.type === 'text' || existing.type === 'sticker') {
             const next = child.val() as Omit<Stroke, 'id'>
             const a = existing.data, b = next.data
             if (a.x !== b.x || a.y !== b.y || a.width !== b.width || a.height !== b.height || a.rotation !== b.rotation || a.text !== b.text) {

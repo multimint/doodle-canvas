@@ -61,6 +61,7 @@ export function CanvasPage() {
   const [color, setColor] = useState('#14151c')
   const [strokeWidth, setStrokeWidth] = useState(6)
   const [wiggle] = useState(true)
+  const [selectedSticker, setSelectedSticker] = useState('flower')
 
   // The eraser paints (and its cursor ring shows) at a multiple of the chosen size. This
   // flows to the committed eraser stroke, its follower cursor, AND the cursor broadcast to
@@ -281,9 +282,11 @@ export function CanvasPage() {
             tool={tool}
             color={color}
             strokeWidth={strokeWidth}
+            selectedSticker={selectedSticker}
             onToolChange={setTool}
             onColorChange={setColor}
             onStrokeWidthChange={setStrokeWidth}
+            onStickerChange={setSelectedSticker}
             onClear={handleClearCanvas}
           />
         )}
@@ -320,6 +323,7 @@ export function CanvasPage() {
             remoteStrokes={remoteStrokes}
             onLiveUpdate={handleLiveUpdate}
             wiggle={wiggle}
+            selectedSticker={selectedSticker}
             remoteTextFocus={remoteTextFocus}
             onTextFocus={setTextFocus}
             displayNames={displayNames}
@@ -339,9 +343,11 @@ export function CanvasPage() {
             tool={tool}
             color={color}
             strokeWidth={strokeWidth}
+            selectedSticker={selectedSticker}
             onToolChange={setTool}
             onColorChange={setColor}
             onStrokeWidthChange={setStrokeWidth}
+            onStickerChange={setSelectedSticker}
             onClear={handleClearCanvas}
             horizontal
           />

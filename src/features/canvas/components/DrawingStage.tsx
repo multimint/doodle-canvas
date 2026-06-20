@@ -24,10 +24,11 @@ import { rectToPerimeter, ellipseToPerimeter } from '../utils/wiggleUtils';
 import { WiggleFilters } from './WiggleFilters';
 import { RemoteTextFocus } from './RemoteTextFocus';
 import { TextBoxNode } from './TextBoxNode';
+import { StickerNode } from './StickerNode';
 import { BoxControls } from './BoxControls';
 import { MultiSelectOverlay } from './MultiSelectOverlay';
 import { TextBoxEditor } from './TextBoxEditor';
-import type { ActiveBox, XformBox } from './textBoxTypes';
+import type { ActiveBox, XformBox, ActiveSticker } from './textBoxTypes';
 import { useViewport } from '../hooks/useViewport';
 import { cursorForTool } from '../utils/cursorForTool';
 import { usesToolCursor } from '../utils/toolCursor';
@@ -60,6 +61,7 @@ interface Props {
   remoteStrokes?: Record<string, LiveStroke>;
   onLiveUpdate?: (stroke: LiveStroke | null) => void;
   wiggle?: boolean;
+  selectedSticker?: string;
   // Friends' live Text Box focus (keyed by uid): which box they're on, editing flag, live text.
   remoteTextFocus?: Record<string, TextFocus>;
   // Report THIS client's Text Box focus so friends can see it (boxId null = no box / cleared).
@@ -101,6 +103,7 @@ export function DrawingStage({
   remoteStrokes,
   onLiveUpdate,
   wiggle = true,
+  selectedSticker = 'flower',
   remoteTextFocus,
   onTextFocus,
   displayNames,
@@ -149,6 +152,7 @@ export function DrawingStage({
   //   editing === false      -> just selected (Konva text visible, handles shown)
   // x/y/width/height are the UNROTATED top-left frame; rotation in degrees.
   const [active, setActive] = useState<ActiveBox | null>(null);
+  const [activeSticker, setActiveSticker] = useState<ActiveSticker | null>(null);
   // Transient geometry while resizing a box in a MULTI-selection — overrides the
   // box's stored geometry so it reflows live. Cleared once the persisted stroke
   // catches up (see reconcile effect below). Single-box transforms write `active`.
@@ -188,6 +192,7 @@ export function DrawingStage({
   // Clear every selection state (single + multi). Used on empty-canvas click / tool change.
   const clearSelection = useCallback(() => {
     setActive(null);
+    setActiveSticker(null);
     setXform(null);
     setMultiIds([]);
     setMultiRect(null);
@@ -344,6 +349,13 @@ export function DrawingStage({
       setLivePoints(pts);
       return;
     }
+    if (tool === 'sticker') {
+      const { x, y } = getPos();
+      const data = buildStrokeData('sticker', [x, y], color, strokeWidth, { stickerId: selectedSticker });
+      onStrokeComplete({ type: 'sticker', authorId: '', data, timestamp: Date.now() });
+      onToolChange?.('select');
+      return;
+    }
     pendingCommitRef.current = false; // new stroke starts — cancel any held live line
     isDrawing.current = true;
     const { x, y } = getPos();
@@ -440,7 +452,7 @@ export function DrawingStage({
         return;
       }
       const hits = strokes.filter(
-        (s) => s.type === 'text' && aabbOverlap(box, textAABB(s.data)),
+        (s) => (s.type === 'text' || s.type === 'sticker') && aabbOverlap(box, textAABB(s.data)),
       );
       if (hits.length === 0) {
         clearSelection();
@@ -630,6 +642,16 @@ export function DrawingStage({
     [active, onStrokeComplete, onUpdateStroke, onDeleteStroke, onToolChange],
   );
 
+  // Wrap setActiveSticker so selecting a sticker always clears the text-box selection.
+  const selectStickerStroke = useCallback((s: ActiveSticker) => {
+    setActive(null);
+    setXform(null);
+    setMultiIds([]);
+    setMultiRect(null);
+    setMultiOffset(null);
+    setActiveSticker(s);
+  }, []);
+
   // Select a Text Box in idle mode, capturing its current bounds for the outline.
   // Nodes render around their centre (offsetX/Y = half size), so the unrotated
   // top-left is node position minus offset.
@@ -637,6 +659,7 @@ export function DrawingStage({
   // draggable Group now, so we read geometry from `data` rather than node attrs.
   const selectStroke = useCallback(
     (s: Stroke) => {
+      setActiveSticker(null);
       setMultiIds([]);
       setMultiRect(null);
       setMultiOffset(null); // single-select replaces any group
@@ -691,6 +714,7 @@ export function DrawingStage({
   useEffect(() => {
     if (tool === 'select') return;
     setActive((prev) => (prev && prev.editing ? prev : null));
+    setActiveSticker(null);
     setXform(null);
     setMultiIds([]);
     setMultiRect(null);
@@ -783,11 +807,12 @@ export function DrawingStage({
     }
   }, [strokes, xform]);
 
-  // Delete/Backspace removes the selected Text Box(es) — but not while typing in any
-  // field (topbar title rename is an <input>, the editor is a <textarea>).
+  // Delete/Backspace removes the selected Text Box(es) or sticker — but not while
+  // typing in any field (topbar title rename is an <input>, the editor is a <textarea>).
   useEffect(() => {
     const single = active && !active.editing && active.id ? active.id : null;
-    if (!single && multiIds.length === 0) return;
+    const singleSticker = activeSticker?.id ?? null;
+    if (!single && !singleSticker && multiIds.length === 0) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Delete' && e.key !== 'Backspace') return;
       const t = e.target;
@@ -799,6 +824,9 @@ export function DrawingStage({
         setMultiIds([]);
         setMultiRect(null);
         setMultiOffset(null);
+      } else if (singleSticker) {
+        onDeleteStroke(singleSticker);
+        setActiveSticker(null);
       } else if (single) {
         onDeleteStroke(single);
         setActive(null);
@@ -806,7 +834,7 @@ export function DrawingStage({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [active, multiIds, onDeleteStroke]);
+  }, [active, activeSticker, multiIds, onDeleteStroke]);
 
   const renderStroke = (stroke: Stroke) => {
     if (stroke.type === 'text') {
@@ -828,6 +856,22 @@ export function DrawingStage({
           openEditExisting={openEditExisting}
           onUpdateStroke={onUpdateStroke}
           remoteText={remoteEditText[stroke.id]}
+        />
+      );
+    }
+    if (stroke.type === 'sticker') {
+      return (
+        <StickerNode
+          key={stroke.id}
+          stroke={stroke}
+          tool={tool}
+          zoom={zoom}
+          activeSticker={activeSticker}
+          stageRef={stageRef}
+          handleStartRef={handleStartRef}
+          onSelect={selectStickerStroke}
+          setActiveSticker={setActiveSticker}
+          onUpdateStroke={onUpdateStroke}
         />
       );
     }
@@ -1022,12 +1066,16 @@ export function DrawingStage({
             {!disabled && renderEraserLiveMask()}
           </Layer>
           <Layer ref={layerRef}>
-            {strokes.filter((s) => s.type !== 'marker').map(renderStroke)}
+            {/* Non-text/sticker strokes (pen, eraser, rect, etc.) rendered first so the
+                eraser's destination-out never cuts through text boxes or stickers. */}
+            {strokes.filter((s) => s.type !== 'marker' && s.type !== 'text' && s.type !== 'sticker').map(renderStroke)}
             {remoteStrokes &&
               Object.entries(remoteStrokes).map(([uid, s]) =>
                 renderRemoteLiveStroke(uid, s),
               )}
             {!disabled && tool !== 'marker' && renderLiveStroke()}
+            {/* Text and stickers always after erasers — immune to destination-out. */}
+            {strokes.filter((s) => s.type === 'text' || s.type === 'sticker').map(renderStroke)}
             {/* Friends' live Text Box focus: coloured outline + name for the box each is
                 selecting/editing (their live text is mirrored via TextBoxNode above). */}
             <RemoteTextFocus

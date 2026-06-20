@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { ref, get } from 'firebase/database'
-import { Stage, Layer, Line, Rect, Ellipse, Text } from 'react-konva'
+import { Stage, Layer, Line, Rect, Ellipse, Text, Shape } from 'react-konva'
 import { rtdb } from '../../lib/firebase'
 import { Icon } from '../../lib/icons'
 import { DOODLE_FONT } from '../../lib/fonts'
 import type { Stroke } from '../../lib/types'
+import { drawSticker } from '../canvas/render/stickerLibrary'
 
 const CANVAS_W = 1920
 const CANVAS_H = 1080
@@ -67,6 +68,22 @@ export function CanvasPreview({ canvasId, accentColor = '#3d5afe' }: Props) {
         return <Line key={k} points={data.points ?? []} stroke={data.stroke} strokeWidth={data.strokeWidth} lineCap="round" listening={false} />
       case 'text':
         return <Text key={k} x={data.x} y={data.y} text={data.text} fontSize={data.fontSize} fill={data.stroke} fontFamily={DOODLE_FONT} listening={false} />
+      case 'sticker': {
+        const { x = 0, y = 0, width = 120, height = 120, rotation = 0, stickerId = 'flower', stroke = '#000000' } = data
+        return (
+          <Shape
+            key={k}
+            x={x + width / 2}
+            y={y + height / 2}
+            offsetX={width / 2}
+            offsetY={height / 2}
+            rotation={rotation}
+            listening={false}
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            sceneFunc={(ctx) => { const c2d: CanvasRenderingContext2D = (ctx as any)._context; c2d.save(); drawSticker(c2d, stickerId, Math.min(width, height) / 2, stroke); c2d.restore() }}
+          />
+        )
+      }
       default:
         return null
     }
