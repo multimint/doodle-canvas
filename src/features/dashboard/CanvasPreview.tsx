@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import { ref, get } from 'firebase/database'
-import { Stage, Layer, Line, Rect, Ellipse, Text, Shape } from 'react-konva'
 import { rtdb } from '../../lib/firebase'
 import { Icon } from '../../lib/icons'
 import { DOODLE_FONT } from '../../lib/fonts'
@@ -15,8 +14,103 @@ interface Props {
   accentColor?: string
 }
 
+function drawSmoothLine(ctx: CanvasRenderingContext2D, points: number[]) {
+  if (points.length < 2) return
+  ctx.beginPath()
+  ctx.moveTo(points[0], points[1])
+  if (points.length === 2) {
+    ctx.lineTo(points[0], points[1])
+  } else {
+    for (let i = 2; i < points.length - 2; i += 2) {
+      const cx = points[i], cy = points[i + 1]
+      const nx = points[i + 2], ny = points[i + 3]
+      ctx.quadraticCurveTo(cx, cy, (cx + nx) / 2, (cy + ny) / 2)
+    }
+    ctx.lineTo(points[points.length - 2], points[points.length - 1])
+  }
+  ctx.stroke()
+}
+
+function renderStroke(ctx: CanvasRenderingContext2D, stroke: Stroke) {
+  const { data } = stroke
+  ctx.save()
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+
+  switch (stroke.type) {
+    case 'path':
+    case 'brush':
+      ctx.strokeStyle = data.stroke ?? '#000'
+      ctx.lineWidth = data.strokeWidth ?? 2
+      drawSmoothLine(ctx, data.points ?? [])
+      break
+
+    case 'marker':
+      ctx.strokeStyle = data.stroke ?? '#000'
+      ctx.lineWidth = (data.strokeWidth ?? 6) * 3
+      drawSmoothLine(ctx, data.points ?? [])
+      break
+
+    case 'eraser':
+      ctx.globalCompositeOperation = 'destination-out'
+      ctx.strokeStyle = 'rgba(0,0,0,1)'
+      ctx.lineWidth = data.strokeWidth ?? 2
+      drawSmoothLine(ctx, data.points ?? [])
+      break
+
+    case 'rect':
+      ctx.strokeStyle = data.stroke ?? '#000'
+      ctx.lineWidth = data.strokeWidth ?? 2
+      ctx.strokeRect(data.x ?? 0, data.y ?? 0, data.width ?? 0, data.height ?? 0)
+      break
+
+    case 'circle':
+      ctx.strokeStyle = data.stroke ?? '#000'
+      ctx.lineWidth = data.strokeWidth ?? 2
+      ctx.beginPath()
+      ctx.ellipse(data.x ?? 0, data.y ?? 0, data.radiusX ?? 0, data.radiusY ?? 0, 0, 0, Math.PI * 2)
+      ctx.stroke()
+      break
+
+    case 'line': {
+      ctx.strokeStyle = data.stroke ?? '#000'
+      ctx.lineWidth = data.strokeWidth ?? 2
+      const pts = data.points ?? []
+      if (pts.length >= 4) {
+        ctx.beginPath()
+        ctx.moveTo(pts[0], pts[1])
+        for (let i = 2; i < pts.length; i += 2) ctx.lineTo(pts[i], pts[i + 1])
+        ctx.stroke()
+      }
+      break
+    }
+
+    case 'text': {
+      const { x = 0, y = 0, text = '', fontSize = 20, stroke = '#000' } = data
+      ctx.fillStyle = stroke
+      ctx.font = `${fontSize}px ${DOODLE_FONT}`
+      ctx.textBaseline = 'top'
+      text.split('\n').forEach((line, i) => {
+        ctx.fillText(line, x, y + i * fontSize * 1.2)
+      })
+      break
+    }
+
+    case 'sticker': {
+      const { x = 0, y = 0, width = 120, height = 120, rotation = 0, stickerId = 'flower', stroke = '#000000' } = data
+      ctx.translate(x + width / 2, y + height / 2)
+      ctx.rotate(rotation * Math.PI / 180)
+      drawSticker(ctx, stickerId, Math.min(width, height) / 2, stroke)
+      break
+    }
+  }
+
+  ctx.restore()
+}
+
 export function CanvasPreview({ canvasId, accentColor = '#3d5afe' }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
   const [size, setSize] = useState({ w: 0, h: 0 })
   const [strokes, setStrokes] = useState<Stroke[]>([])
   const [loaded, setLoaded] = useState(false)
@@ -47,61 +141,32 @@ export function CanvasPreview({ canvasId, accentColor = '#3d5afe' }: Props) {
       .catch(() => { setLoaded(true) })
   }, [canvasId])
 
-  const scale = size.w / CANVAS_W
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas || size.w === 0 || !loaded) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
 
-  const renderStroke = (stroke: Stroke) => {
-    const { data } = stroke
-    const k = stroke.id
-    switch (stroke.type) {
-      case 'path':
-      case 'brush':
-        return <Line key={k} points={data.points ?? []} stroke={data.stroke} strokeWidth={data.strokeWidth} lineCap="round" lineJoin="round" tension={0.5} listening={false} />
-      case 'marker':
-        return <Line key={k} points={data.points ?? []} stroke={data.stroke} strokeWidth={(data.strokeWidth ?? 6) * 3} lineCap="round" lineJoin="round" tension={0.4} listening={false} />
-      case 'eraser':
-        return <Line key={k} points={data.points ?? []} stroke="rgba(0,0,0,1)" strokeWidth={data.strokeWidth} lineCap="round" lineJoin="round" tension={0.5} globalCompositeOperation="destination-out" listening={false} />
-      case 'rect':
-        return <Rect key={k} x={data.x} y={data.y} width={data.width} height={data.height} stroke={data.stroke} strokeWidth={data.strokeWidth} fill="transparent" listening={false} />
-      case 'circle':
-        return <Ellipse key={k} x={data.x} y={data.y} radiusX={data.radiusX ?? 0} radiusY={data.radiusY ?? 0} stroke={data.stroke} strokeWidth={data.strokeWidth} fill="transparent" listening={false} />
-      case 'line':
-        return <Line key={k} points={data.points ?? []} stroke={data.stroke} strokeWidth={data.strokeWidth} lineCap="round" listening={false} />
-      case 'text':
-        return <Text key={k} x={data.x} y={data.y} text={data.text} fontSize={data.fontSize} fill={data.stroke} fontFamily={DOODLE_FONT} listening={false} />
-      case 'sticker': {
-        const { x = 0, y = 0, width = 120, height = 120, rotation = 0, stickerId = 'flower', stroke = '#000000' } = data
-        return (
-          <Shape
-            key={k}
-            x={x + width / 2}
-            y={y + height / 2}
-            offsetX={width / 2}
-            offsetY={height / 2}
-            rotation={rotation}
-            listening={false}
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            sceneFunc={(ctx) => { const c2d: CanvasRenderingContext2D = (ctx as any)._context; c2d.save(); drawSticker(c2d, stickerId, Math.min(width, height) / 2, stroke); c2d.restore() }}
-          />
-        )
-      }
-      default:
-        return null
-    }
-  }
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    const scale = size.w / CANVAS_W
+    ctx.save()
+    ctx.scale(scale, scale)
+
+    const markerFirst = [
+      ...strokes.filter((s) => s.type === 'marker'),
+      ...strokes.filter((s) => s.type !== 'marker'),
+    ]
+    for (const stroke of markerFirst) renderStroke(ctx, stroke)
+
+    ctx.restore()
+  }, [strokes, size, loaded])
 
   const isEmpty = loaded && strokes.length === 0
-
-  const markerFirst = [
-    ...strokes.filter((s) => s.type === 'marker'),
-    ...strokes.filter((s) => s.type !== 'marker'),
-  ]
 
   return (
     <div ref={containerRef} style={{ width: '100%', aspectRatio: '16/9', overflow: 'hidden', background: 'transparent', position: 'relative' }}>
       {size.w > 0 && (
-        <Stage width={size.w} height={size.h} scaleX={scale} scaleY={scale} listening={false}>
-          <Layer>{markerFirst.map(renderStroke)}</Layer>
-        </Stage>
+        <canvas ref={canvasRef} width={size.w} height={size.h} style={{ display: 'block', width: '100%', height: '100%' }} />
       )}
       {isEmpty && (
         <div style={{
