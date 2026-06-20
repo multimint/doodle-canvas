@@ -60,7 +60,7 @@ export function CanvasPage() {
   const [tool, setTool] = useState<ToolType>('pen')
   const [color, setColor] = useState('#14151c')
   const [strokeWidth, setStrokeWidth] = useState(6)
-  const [wiggle] = useState(true)
+  const [wiggle, setWiggle] = useState(true)
   const [selectedSticker, setSelectedSticker] = useState('flower')
 
   // The eraser paints (and its cursor ring shows) at a multiple of the chosen size. This
@@ -230,6 +230,8 @@ export function CanvasPage() {
         onUndo={handleUndo}
         onRedo={handleRedo}
         onShare={() => setShowInvite(true)}
+        wiggle={wiggle}
+        onWiggleToggle={() => setWiggle(w => !w)}
       />
 
       {/* Guest banner */}

@@ -16,6 +16,8 @@ interface CanvasTopBarProps {
   onUndo: () => void
   onRedo: () => void
   onShare: () => void
+  wiggle: boolean
+  onWiggleToggle: () => void
 }
 
 // The canvas top bar: back button, (rename-able) title + saved chip, collaborator
@@ -35,6 +37,8 @@ export function CanvasTopBar({
   onUndo,
   onRedo,
   onShare,
+  wiggle,
+  onWiggleToggle,
 }: CanvasTopBarProps) {
   return (
     <div
@@ -115,6 +119,19 @@ export function CanvasTopBar({
 
         <button className="m-tool" onClick={onRedo} title="Redo (Ctrl+Shift+Z)" style={{ width: 40, height: 40 }}>
           <Icon name="redo" size={19} />
+        </button>
+
+        <button
+          className="m-tool"
+          onClick={onWiggleToggle}
+          title={wiggle ? 'Wiggle on — click to turn off' : 'Wiggle off — click to turn on'}
+          style={{
+            width: 40, height: 40,
+            background: wiggle ? 'color-mix(in oklab, var(--m-primary) 12%, transparent)' : undefined,
+            color: wiggle ? 'var(--m-primary)' : 'var(--m-ink-3)',
+          }}
+        >
+          <Icon name="wiggle" size={19} />
         </button>
 
         {isOwner && (
