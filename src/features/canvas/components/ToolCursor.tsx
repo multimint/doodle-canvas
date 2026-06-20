@@ -1,6 +1,10 @@
 import { forwardRef } from 'react'
 import type { ToolType } from '../../../lib/types'
-import { toolCursorSize, toolCursorVariant } from '../utils/toolCursor'
+import {
+  toolCursorSize,
+  toolCursorVariant,
+  toolFootprintScale,
+} from '../utils/toolCursor'
 
 interface Props {
   tool: ToolType
@@ -25,7 +29,10 @@ export const ToolCursor = forwardRef<HTMLDivElement, Props>(function ToolCursor(
   const variant = toolCursorVariant(tool)
   if (variant === 'none') return null
 
-  const d = toolCursorSize(strokeWidth, zoom)
+  // Footprint-sized outer visual; `core` is the thin true stroke width, drawn as the centre
+  // dot inside the spray's spread ring (the dense core of the center-weighted cloud).
+  const d = toolCursorSize(strokeWidth, zoom, toolFootprintScale(tool))
+  const core = toolCursorSize(strokeWidth, zoom)
 
   return (
     <div
@@ -33,9 +40,27 @@ export const ToolCursor = forwardRef<HTMLDivElement, Props>(function ToolCursor(
       className='tool-cursor'
       style={{ visibility: visible ? 'visible' : 'hidden' }}
     >
-      {variant === 'filled' && (
+      {variant === 'pen' && (
         <span
           className='tool-cursor-dot'
+          style={{ width: d, height: d, background: color }}
+        />
+      )}
+      {variant === 'spray' && (
+        <>
+          <span
+            className='tool-cursor-spray'
+            style={{ width: d, height: d, borderColor: color }}
+          />
+          <span
+            className='tool-cursor-dot'
+            style={{ width: core, height: core, background: color }}
+          />
+        </>
+      )}
+      {variant === 'marker' && (
+        <span
+          className='tool-cursor-marker'
           style={{ width: d, height: d, background: color }}
         />
       )}

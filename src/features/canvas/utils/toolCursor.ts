@@ -9,13 +9,17 @@ import type { ToolType } from '../../../lib/types'
 export const MIN_CURSOR_SIZE = 8
 
 export type ToolCursorVariant =
-  | 'filled' // pen / brush: solid dot in the tool color, sized to the stroke
+  | 'pen' // pen: precise solid dot in the tool color, sized to the thin stroke
+  | 'spray' // brush/spray: dashed spread ring (the wide cloud) with a solid core dot
+  | 'marker' // marker: translucent rounded-square felt nib at the broad marker width
   | 'ring' // eraser: hollow ring, sized to the stroke (no color — it erases)
   | 'crosshair' // line / rect / circle: precise point + small color dot (size is the drag)
   | 'none' // text / hand / select: no follower, keep the native cursor
 
 export function toolCursorVariant(tool: ToolType): ToolCursorVariant {
-  if (tool === 'pen' || tool === 'brush' || tool === 'marker') return 'filled'
+  if (tool === 'pen') return 'pen'
+  if (tool === 'brush') return 'spray'
+  if (tool === 'marker') return 'marker'
   if (tool === 'eraser') return 'ring'
   if (tool === 'line' || tool === 'rect' || tool === 'circle') return 'crosshair'
   return 'none'
@@ -27,8 +31,17 @@ export function usesToolCursor(tool: ToolType): boolean {
   return toolCursorVariant(tool) !== 'none'
 }
 
-// On-screen diameter for the sized variants: the painted width (strokeWidth in canvas
-// units, scaled by zoom) clamped to a usable minimum.
-export function toolCursorSize(strokeWidth: number, zoom: number): number {
-  return Math.max(MIN_CURSOR_SIZE, strokeWidth * zoom)
+// How much wider than the picked stroke width the tool actually paints, so each cursor can
+// mirror its real footprint: the pen lays a 1× line, the marker a 3× felt nib, and the spray
+// scatters over a ~5× cloud (sprayUtils uses radius = 2.5× → diameter 5×).
+export function toolFootprintScale(tool: ToolType): number {
+  if (tool === 'marker') return 3
+  if (tool === 'brush') return 5
+  return 1
+}
+
+// On-screen diameter for the sized variants: the painted width (strokeWidth in canvas units,
+// scaled by zoom and the tool's footprint multiplier) clamped to a usable minimum.
+export function toolCursorSize(strokeWidth: number, zoom: number, scale = 1): number {
+  return Math.max(MIN_CURSOR_SIZE, strokeWidth * zoom * scale)
 }

@@ -2,14 +2,15 @@ import {
   MIN_CURSOR_SIZE,
   toolCursorSize,
   toolCursorVariant,
+  toolFootprintScale,
   usesToolCursor,
 } from './toolCursor'
 
 describe('toolCursorVariant', () => {
-  it('uses a filled dot for the color free-draw tools', () => {
-    expect(toolCursorVariant('pen')).toBe('filled')
-    expect(toolCursorVariant('brush')).toBe('filled')
-    expect(toolCursorVariant('marker')).toBe('filled')
+  it('gives each free-draw tool its own footprint-matched visual', () => {
+    expect(toolCursorVariant('pen')).toBe('pen')
+    expect(toolCursorVariant('brush')).toBe('spray')
+    expect(toolCursorVariant('marker')).toBe('marker')
   })
 
   it('uses a hollow ring for the eraser', () => {
@@ -50,5 +51,18 @@ describe('toolCursorSize', () => {
   it('never renders smaller than the minimum', () => {
     expect(toolCursorSize(3, 0.5)).toBe(MIN_CURSOR_SIZE)
     expect(toolCursorSize(6, 1)).toBe(MIN_CURSOR_SIZE) // exactly at the floor
+  })
+
+  it('applies the tool footprint multiplier to the diameter', () => {
+    expect(toolCursorSize(10, 1, 3)).toBe(30) // marker: 3× width
+    expect(toolCursorSize(10, 1, 5)).toBe(50) // spray: ~5× cloud
+  })
+})
+
+describe('toolFootprintScale', () => {
+  it('mirrors each tool real painted width', () => {
+    expect(toolFootprintScale('pen')).toBe(1)
+    expect(toolFootprintScale('marker')).toBe(3)
+    expect(toolFootprintScale('brush')).toBe(5)
   })
 })
