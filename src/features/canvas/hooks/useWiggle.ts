@@ -27,7 +27,8 @@ interface WiggleEntry {
   kind: WiggleKind
   salt: number
   base?: number[]        // line: un-jittered points, for reset
-  variants?: number[][]  // line: one jittered point array per frame
+  variants?: number[][]  // line: one jittered point array per frame (built lazily)
+  pendingSW?: number     // strokeWidth stored at register time; present until variants built
 }
 
 interface LiveEntry {
@@ -66,12 +67,14 @@ export function useWiggle(
   layerRef: React.RefObject<Konva.Layer>,
   enabled: boolean,
 ) {
-  const registryRef   = useRef<Map<string, WiggleEntry>>(new Map())
-  const liveEntryRef  = useRef<LiveEntry | null>(null)
-  const frozenTextRef = useRef<Set<string>>(new Set())
-  const rafRef        = useRef<number>(0)
-  const lastFrameRef  = useRef<number>(-1)
-  const enabledRef    = useRef(enabled)
+  const registryRef    = useRef<Map<string, WiggleEntry>>(new Map())
+  const liveEntryRef   = useRef<LiveEntry | null>(null)
+  const frozenTextRef  = useRef<Set<string>>(new Set())
+  const rafRef         = useRef<number>(0)
+  const lastFrameRef   = useRef<number>(-1)
+  const enabledRef     = useRef(enabled)
+  // Fix 3: IDs of entries whose variants haven't been built yet
+  const pendingBuildsRef = useRef<Set<string>>(new Set())
 
   useEffect(() => { enabledRef.current = enabled }, [enabled])
 
@@ -92,6 +95,7 @@ export function useWiggle(
       if (entry.kind === 'shape') {
         entry.node.setAttr('animT', fi)
       } else if (entry.kind === 'line') {
+        // variants may be absent if not yet built (initial load deferred); skip cleanly
         if (entry.variants) (entry.node as Konva.Line).points(entry.variants[fi])
       } else {
         // text: bump animT so the glyph node's sceneFunc warps the outlines through
@@ -121,8 +125,25 @@ export function useWiggle(
     live.variants = buildVariants(base, node.strokeWidth(), 0)
   }, [])
 
+  // Eagerly build variants for all pending entries (called from the first rAF tick after
+  // a bulk load so that the initial paint is unblocked and wiggle starts one frame later).
+  const flushPendingBuilds = useCallback(() => {
+    const pending = pendingBuildsRef.current
+    if (pending.size === 0) return
+    for (const id of pending) {
+      const entry = registryRef.current.get(id)
+      if (entry && entry.base !== undefined && entry.pendingSW !== undefined) {
+        entry.variants = buildVariants(entry.base, entry.pendingSW, entry.salt)
+        entry.pendingSW = undefined
+      }
+    }
+    pending.clear()
+  }, [])
+
   const tick = useCallback((t: DOMHighResTimeStamp) => {
     if (!enabledRef.current) return
+    // Flush any variants deferred from a bulk initial load
+    flushPendingBuilds()
     const fi = frameIndex(t)
     // Only repaint when the boil frame actually flips (~12fps) rather than every rAF.
     if (fi !== lastFrameRef.current) {
@@ -131,7 +152,7 @@ export function useWiggle(
       drawAll()
     }
     rafRef.current = requestAnimationFrame(tick)
-  }, [applyFrame, drawAll])
+  }, [applyFrame, drawAll, flushPendingBuilds])
 
   const resetAll = useCallback(() => {
     registryRef.current.forEach((entry) => {
@@ -164,9 +185,16 @@ export function useWiggle(
   useLayoutEffect(() => {
     if (enabledRef.current) {
       refreshLiveVariants()
-      const fi = frameIndex(performance.now())
-      lastFrameRef.current = fi
-      applyFrame(fi)
+      const pending = pendingBuildsRef.current
+      if (pending.size <= 5) {
+        // Small pending set (e.g. single new stroke drawn) — build eagerly and jitter in sync
+        flushPendingBuilds()
+        const fi = frameIndex(performance.now())
+        lastFrameRef.current = fi
+        applyFrame(fi)
+      }
+      // Large pending set = initial bulk load: skip applyFrame so the first paint is fast;
+      // the rAF tick will flush and start wiggling one frame later (~16ms).
       drawAll()
     } else {
       drawAll()
@@ -182,15 +210,18 @@ export function useWiggle(
     const entry: WiggleEntry = { node, kind, salt }
     if (kind === 'line') {
       const line = node as Konva.Line
-      const base = basePoints(stroke)
-      entry.base = base
-      entry.variants = buildVariants(base, line.strokeWidth(), salt)
+      entry.base = basePoints(stroke)
+      // Defer buildVariants to the next rAF tick (or eagerly for small batches in useLayoutEffect)
+      // so a bulk initial load doesn't block the first paint.
+      entry.pendingSW = line.strokeWidth()
+      pendingBuildsRef.current.add(id)
     }
     registryRef.current.set(id, entry)
   }, [])
 
   const unregisterStroke = useCallback((id: string) => {
     registryRef.current.delete(id)
+    pendingBuildsRef.current.delete(id)
   }, [])
 
   const registerLive = useCallback((

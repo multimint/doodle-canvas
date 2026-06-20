@@ -114,19 +114,37 @@ export function CanvasPreview({ canvasId, accentColor = '#3d5afe' }: Props) {
   const [size, setSize] = useState({ w: 0, h: 0 })
   const [strokes, setStrokes] = useState<Stroke[]>([])
   const [loaded, setLoaded] = useState(false)
+  const [visible, setVisible] = useState(false)
 
+  // Fix 2: rAF gate collapses rapid resize events into one setSize per frame
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
+    let rafId = 0
     const ro = new ResizeObserver(([entry]) => {
-      const w = entry.contentRect.width
-      setSize({ w, h: Math.round(w * CANVAS_H / CANVAS_W) })
+      cancelAnimationFrame(rafId)
+      rafId = requestAnimationFrame(() => {
+        const w = entry.contentRect.width
+        setSize({ w, h: Math.round(w * CANVAS_H / CANVAS_W) })
+      })
     })
     ro.observe(el)
-    return () => ro.disconnect()
+    return () => { ro.disconnect(); cancelAnimationFrame(rafId) }
+  }, [])
+
+  // Fix 1: defer Firebase fetch until the card enters the viewport
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const io = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) setVisible(true)
+    }, { threshold: 0 })
+    io.observe(el)
+    return () => io.disconnect()
   }, [])
 
   useEffect(() => {
+    if (!visible) return
     setLoaded(false)
     get(ref(rtdb, `canvases/${canvasId}/strokes`))
       .then((snap) => {
@@ -139,7 +157,7 @@ export function CanvasPreview({ canvasId, accentColor = '#3d5afe' }: Props) {
         setLoaded(true)
       })
       .catch(() => { setLoaded(true) })
-  }, [canvasId])
+  }, [canvasId, visible])
 
   useEffect(() => {
     const canvas = canvasRef.current

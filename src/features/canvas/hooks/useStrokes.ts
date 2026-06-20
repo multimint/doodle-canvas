@@ -4,6 +4,23 @@ import { rtdb } from '../../../lib/firebase'
 import { STROKE_CAP } from '../../../lib/types'
 import type { Stroke, StrokeData } from '../../../lib/types'
 
+// Binary insert into a sorted-by-timestamp array — O(log n) search + O(n) copy,
+// vs O(n log n) full sort. Pays off on the hot path of "user just drew one stroke".
+function insertSorted(prev: Stroke[], stroke: Stroke): Stroke[] {
+  const ts = stroke.timestamp
+  let lo = 0, hi = prev.length
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1
+    if (prev[mid].timestamp <= ts) lo = mid + 1
+    else hi = mid
+  }
+  const out = new Array<Stroke>(prev.length + 1)
+  for (let i = 0; i < lo; i++) out[i] = prev[i]
+  out[lo] = stroke
+  for (let i = lo; i < prev.length; i++) out[i + 1] = prev[i]
+  return out
+}
+
 export function useStrokes(canvasId: string) {
   const [strokes, setStrokes] = useState<Stroke[]>([])
   const [strokesLoaded, setStrokesLoaded] = useState(false)
@@ -11,15 +28,20 @@ export function useStrokes(canvasId: string) {
   // Stable object cache — reuses the same JS reference for unchanged strokes so
   // react-konva's reconciler sees no prop change and skips setAttrs (which would
   // otherwise reset wiggle-mutated node positions back to their original values).
-  const cacheRef = useRef<Map<string, Stroke>>(new Map())
+  const cacheRef    = useRef<Map<string, Stroke>>(new Map())
+  const sortedRef   = useRef<Stroke[]>([])
 
   useEffect(() => {
     setStrokesLoaded(false)
     cacheRef.current.clear()
+    sortedRef.current = []
     const strokesRef = ref(rtdb, basePath)
     const handle = onValue(strokesRef, (snap) => {
       const result: Stroke[] = []
       const seen = new Set<string>()
+      const newStrokes: Stroke[] = []
+      let hasMutations = false
+
       snap.forEach((child) => {
         const id = child.key!
         seen.add(id)
@@ -35,6 +57,7 @@ export function useStrokes(canvasId: string) {
               const updated = { id, ...next } as Stroke
               cacheRef.current.set(id, updated)
               result.push(updated)
+              hasMutations = true
             } else {
               result.push(existing)
             }
@@ -45,14 +68,32 @@ export function useStrokes(canvasId: string) {
           const stroke = { id, ...child.val() } as Stroke
           cacheRef.current.set(id, stroke)
           result.push(stroke)
+          newStrokes.push(stroke)
         }
       })
+
       // Evict deleted strokes from cache
+      let deletionCount = 0
       for (const id of cacheRef.current.keys()) {
-        if (!seen.has(id)) cacheRef.current.delete(id)
+        if (!seen.has(id)) { cacheRef.current.delete(id); deletionCount++ }
       }
-      result.sort((a, b) => a.timestamp - b.timestamp)
-      setStrokes(result)
+
+      let sorted: Stroke[]
+      if (newStrokes.length === 1 && deletionCount === 0 && !hasMutations) {
+        // Hot path: single new stroke (user is drawing) — binary insert, O(log n + n)
+        sorted = insertSorted(sortedRef.current, newStrokes[0])
+      } else if (hasMutations && newStrokes.length === 0 && deletionCount === 0) {
+        // Only text/sticker mutations — preserve existing order, swap updated refs
+        const byId = new Map(result.map(s => [s.id, s]))
+        sorted = sortedRef.current.map(s => byId.get(s.id) ?? s)
+      } else {
+        // Initial load, bulk add, or deletions — full sort
+        result.sort((a, b) => a.timestamp - b.timestamp)
+        sorted = result
+      }
+
+      sortedRef.current = sorted
+      setStrokes(sorted)
       setStrokesLoaded(true)
     })
     return () => off(strokesRef, 'value', handle)
