@@ -92,6 +92,10 @@ interface Props {
 }
 
 const DPR = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
+// Highlighter translucency. Markers paint *opaquely* onto their own layer (so per-pixel the
+// latest/topmost stroke wins and same-color overlaps never darken), and the whole layer is
+// then shown at this alpha — one flat, uniform translucency regardless of how strokes nest.
+const MARKER_LAYER_OPACITY = 0.82
 const SIMPLE_TYPES: ToolType[] = [
   'pen',
   'brush',
@@ -1067,6 +1071,8 @@ export function CanvasStage({
             inset: 0,
             // Only the top canvas takes pointer input; both share the same coordinate space.
             pointerEvents: i === 1 ? 'auto' : 'none',
+            // The marker layer (i === 0) is the highlighter: shown translucent as a whole.
+            opacity: i === 0 ? MARKER_LAYER_OPACITY : 1,
             cursor,
             touchAction: 'none',
           }}

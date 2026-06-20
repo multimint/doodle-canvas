@@ -77,7 +77,9 @@ export function drawSimpleStroke(
       break
     }
     case 'marker': {
-      // 3× width, fully opaque (highlighter translucency, if any, is a canvas-layer property).
+      // 3× width, painted fully opaque on purpose: the marker canvas is a dedicated layer shown
+      // at MARKER_LAYER_OPACITY (CanvasStage), so opaque source-over here makes the latest stroke
+      // win per-pixel and same-color overlaps stay one flat tone — the layer alpha is applied once.
       const w = width * 3
       ctx.strokeStyle = d.color ?? '#000'
       ctx.lineWidth = w
