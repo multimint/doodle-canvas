@@ -1,8 +1,8 @@
-import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import { Stage, Layer, Rect, Group } from 'react-konva';
 import type Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
-import type { Stroke, StrokeData, ToolType, TextFocus } from '../../../lib/types';
+import type { Stroke, StrokeData, ToolType, TextFocus, CursorPos } from '../../../lib/types';
 import {
   buildStrokeData,
   MIN_TEXT_WIDTH,
@@ -65,6 +65,20 @@ interface Props {
   // Report THIS client's Text Box focus so friends can see it (boxId null = no box / cleared).
   onTextFocus?: (boxId: string | null, editing: boolean, text?: string) => void;
   displayNames?: Record<string, string>;
+  // Friends' cursor positions including marquee / multi-select state, keyed by uid.
+  friendCursors?: Record<string, CursorPos>;
+  // Report THIS client's selection state so friends can see the rubber-band and selected boxes.
+  onSelectionChange?: (sel: {
+    marquee?: { x0: number; y0: number; x1: number; y1: number } | null;
+    selectedIds?: string[] | null;
+  }) => void;
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  return `rgba(${r},${g},${b},${alpha})`
 }
 
 export function DrawingStage({
@@ -90,7 +104,12 @@ export function DrawingStage({
   remoteTextFocus,
   onTextFocus,
   displayNames,
+  friendCursors,
+  onSelectionChange,
 }: Props) {
+  const onSelectionChangeRef = useRef(onSelectionChange)
+  useEffect(() => { onSelectionChangeRef.current = onSelectionChange }, [onSelectionChange])
+
   const containerRef = useRef<HTMLDivElement>(null);
   const layerRef = useRef<Konva.Layer>(null);
   // Markers render on their own layer behind the main one. The eraser uses destination-out
@@ -173,6 +192,7 @@ export function DrawingStage({
     setMultiIds([]);
     setMultiRect(null);
     setMultiOffset(null);
+    onSelectionChangeRef.current?.({ marquee: null, selectedIds: null });
   }, []);
 
   // Pending-commit: keep live line visible until the committed stroke arrives from Firebase
@@ -364,6 +384,7 @@ export function DrawingStage({
     if (isMarquee.current && marqueeRef.current) {
       marqueeRef.current = { ...marqueeRef.current, x1: x, y1: y };
       setMarquee(marqueeRef.current);
+      onSelectionChangeRef.current?.({ marquee: marqueeRef.current });
       return;
     }
 
@@ -443,6 +464,7 @@ export function DrawingStage({
           strokeWidth,
           initial: d.text ?? '',
         });
+        onSelectionChangeRef.current?.({ marquee: null, selectedIds: null });
         return;
       }
       // 2+ hits -> group selection (move + delete only).
@@ -468,6 +490,7 @@ export function DrawingStage({
         height: u.maxY - u.minY,
       });
       setMultiOffset(null);
+      onSelectionChangeRef.current?.({ marquee: null, selectedIds: hits.map((s) => s.id) });
       return;
     }
     // Tool switched to 'hand' mid-stroke — abandon without committing
@@ -672,6 +695,7 @@ export function DrawingStage({
     setMultiIds([]);
     setMultiRect(null);
     setMultiOffset(null);
+    onSelectionChangeRef.current?.({ marquee: null, selectedIds: null });
   }, [tool]);
 
   // Hide the follower across tool changes so it never flashes at the stage origin before
@@ -1089,6 +1113,46 @@ export function DrawingStage({
                 onUpdateStroke={onUpdateStroke}
               />
             )}
+            {/* Friends' rubber-band marquees and multi-select outlines */}
+            {friendCursors && Object.entries(friendCursors).map(([fuid, c]) => {
+              const elements: React.ReactNode[] = []
+              if (c.marquee) {
+                const { x0, y0, x1, y1 } = c.marquee
+                const mx = Math.min(x0, x1), my = Math.min(y0, y1)
+                const mw = Math.abs(x1 - x0), mh = Math.abs(y1 - y0)
+                elements.push(
+                  <Rect
+                    key={`fmarquee-${fuid}`}
+                    x={mx} y={my} width={mw} height={mh}
+                    stroke={c.color}
+                    strokeWidth={1.5 / zoom}
+                    dash={[6 / zoom, 3 / zoom]}
+                    fill={hexToRgba(c.color, 0.1)}
+                    listening={false}
+                  />
+                )
+              }
+              if (c.selectedIds && c.selectedIds.length >= 2) {
+                c.selectedIds.forEach(id => {
+                  const s = strokes.find(k => k.id === id)
+                  if (!s) return
+                  const a = textAABB(s.data)
+                  elements.push(
+                    <Rect
+                      key={`fsel-${fuid}-${id}`}
+                      x={a.minX} y={a.minY}
+                      width={a.maxX - a.minX} height={a.maxY - a.minY}
+                      stroke={c.color}
+                      strokeWidth={1.5 / zoom}
+                      dash={[5 / zoom, 3 / zoom]}
+                      fill='transparent'
+                      listening={false}
+                    />
+                  )
+                })
+              }
+              return elements
+            })}
           </Layer>
         </Stage>
       )}

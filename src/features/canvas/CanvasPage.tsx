@@ -95,7 +95,7 @@ export function CanvasPage() {
   }, [canvasId, canvasDoc?.ownerId, uid])
 
   const { strokes, atCap, addStroke, updateStroke, deleteStroke, clearAllStrokes } = useStrokes(canvasId!)
-  const { cursors, emitCursor, clearCursor } = useCursors(canvasId!, uid, userColor, tool, effectiveStrokeWidth)
+  const { cursors, emitCursor, updateSelection, clearCursor } = useCursors(canvasId!, uid, userColor, tool, effectiveStrokeWidth)
   const { remoteFocus: remoteTextFocus, setTextFocus } = useTextPresence(canvasId!, uid, userColor)
   const { remoteStrokes, emitLiveStroke, clearLiveStroke } = useLiveStrokes(canvasId!, uid)
   const { presence } = usePresence({
@@ -323,6 +323,8 @@ export function CanvasPage() {
             remoteTextFocus={remoteTextFocus}
             onTextFocus={setTextFocus}
             displayNames={displayNames}
+            friendCursors={cursors}
+            onSelectionChange={updateSelection}
           />
           {!isMobile && (
             <>
