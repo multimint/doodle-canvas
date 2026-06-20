@@ -16,7 +16,6 @@ interface Props {
 
 const DRAW_TOOLS: { id: ToolType; icon: string; label: string }[] = [
   { id: 'pen',    icon: 'pen',    label: 'Pen' },
-  { id: 'brush',  icon: 'spray',  label: 'Spray' },
   { id: 'marker', icon: 'marker', label: 'Marker' },
   { id: 'line',   icon: 'line',   label: 'Line' },
   { id: 'rect',   icon: 'square', label: 'Rectangle' },
