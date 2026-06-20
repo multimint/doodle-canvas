@@ -65,6 +65,9 @@ export interface TextFocus {
   editing: boolean
   color: string
   text?: string
+  // While editing, the friend's caret offset into `text`, so others can render their
+  // text cursor at the right spot inside the box.
+  caret?: number
 }
 
 export interface PresenceEntry {

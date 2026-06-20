@@ -37,9 +37,9 @@ export function useTextPresence(canvasId: string, uid: string, color: string) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canvasId, uid])
 
-  // boxId null → not on any box: clear our focus. Otherwise publish {boxId, editing, text}.
+  // boxId null → not on any box: clear our focus. Otherwise publish {boxId, editing, text, caret}.
   const setTextFocus = useCallback(
-    (boxId: string | null, editing: boolean, text?: string) => {
+    (boxId: string | null, editing: boolean, text?: string, caret?: number) => {
       if (!boxId) {
         lastKeyRef.current = ''
         remove(myRef)
@@ -53,6 +53,7 @@ export function useTextPresence(canvasId: string, uid: string, color: string) {
       lastEmitRef.current = now
       const entry: TextFocus = { boxId, editing, color }
       if (text !== undefined) entry.text = text
+      if (caret !== undefined) entry.caret = caret
       set(myRef, entry)
     },
     [myRef, color],

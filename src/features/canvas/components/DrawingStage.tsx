@@ -23,6 +23,7 @@ import {
 import { rectToPerimeter, ellipseToPerimeter } from '../utils/wiggleUtils';
 import { WiggleFilters } from './WiggleFilters';
 import { RemoteTextFocus } from './RemoteTextFocus';
+import { RemoteTextCaret } from './RemoteTextCaret';
 import { TextBoxNode } from './TextBoxNode';
 import { BoxControls } from './BoxControls';
 import { MultiSelectOverlay } from './MultiSelectOverlay';
@@ -63,7 +64,7 @@ interface Props {
   // Friends' live Text Box focus (keyed by uid): which box they're on, editing flag, live text.
   remoteTextFocus?: Record<string, TextFocus>;
   // Report THIS client's Text Box focus so friends can see it (boxId null = no box / cleared).
-  onTextFocus?: (boxId: string | null, editing: boolean, text?: string) => void;
+  onTextFocus?: (boxId: string | null, editing: boolean, text?: string, caret?: number) => void;
   displayNames?: Record<string, string>;
 }
 
@@ -334,6 +335,9 @@ export function DrawingStage({
   };
 
   const handleMouseMove = (e: KonvaEventObject<MouseEvent>) => {
+    // While editing a Text Box, don't broadcast our pointer — our caret + outline stand in for
+    // it (see the editing effect below), and re-emitting here would resurrect the hidden cursor.
+    if (active?.editing) return;
     if (tool === 'hand') {
       // Broadcast the cursor so friends still see the hand tool (and its pointer) even while
       // panning — otherwise the hand tool emits nothing and the remote cursor disappears.
@@ -712,19 +716,13 @@ export function DrawingStage({
     [remoteTextFocus],
   );
 
-  // While editing a Text Box, the editor textarea covers the canvas, so the stage stops
-  // firing mousemove and our cursor would freeze/vanish for friends. Track the pointer on the
-  // window instead and keep emitting our canvas-space position so our cursor stays live.
+  // While editing a Text Box, our presence is shown by the live text caret + box outline, so
+  // the floating pointer is redundant (and would sit on top of the text). Clear our cursor for
+  // friends while editing; a mousemove after editing ends re-publishes it.
   useEffect(() => {
     if (!active?.editing) return;
-    const onMove = (e: MouseEvent) => {
-      const rect = containerRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      onMouseMove((e.clientX - rect.left - pan.x) / zoom, (e.clientY - rect.top - pan.y) / zoom);
-    };
-    window.addEventListener('mousemove', onMove);
-    return () => window.removeEventListener('mousemove', onMove);
-  }, [active?.editing, pan.x, pan.y, zoom, onMouseMove]);
+    onMouseLeave();
+  }, [active?.editing, onMouseLeave]);
 
   // Konva measures/caches text with whatever font is available at draw time. If a Text
   // Box mounts before the doodle font (Patrick Hand) has loaded it renders in the
@@ -962,10 +960,7 @@ export function DrawingStage({
           onContextMenu={handleContextMenu}
           onMouseLeave={() => {
             handleMouseUp();
-            // While editing a box, the pointer leaving the stage usually just means it moved
-            // onto the editor textarea — keep our cursor alive (the window listener below keeps
-            // emitting) so friends still see us. Otherwise clear it at the canvas edge.
-            if (!active?.editing) onMouseLeave();
+            onMouseLeave(); // clear our cursor at the canvas edge (and while editing it's already hidden)
             setCursorVisible(false); // don't freeze the follower at the canvas edge
           }}
           onWheel={handleWheelOrResize}
@@ -1011,6 +1006,13 @@ export function DrawingStage({
               strokes={strokes}
               displayNames={displayNames ?? {}}
               zoom={zoom}
+            />
+            {/* Each editing friend's blinking text cursor, placed on the live text. */}
+            <RemoteTextCaret
+              focuses={remoteFocusList}
+              strokes={strokes}
+              zoom={zoom}
+              stageRef={stageRef}
             />
             {/* Create-only overlay: a brand-new box (active.id === null) has no committed
                 stroke yet, so it has no draggable Group of its own — render the same
@@ -1107,8 +1109,8 @@ export function DrawingStage({
           selectAllOnFocus={active.id === null}
           onCommit={handleEditingCommit}
           onCancel={() => setActive(null)}
-          onChange={(t) => {
-            if (active.id) onTextFocus?.(active.id, true, t);
+          onChange={(t, caret) => {
+            if (active.id) onTextFocus?.(active.id, true, t, caret);
           }}
         />
       )}

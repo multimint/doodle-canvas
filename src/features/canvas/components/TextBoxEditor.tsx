@@ -23,8 +23,9 @@ interface TextBoxEditorProps {
   selectAllOnFocus?: boolean
   onCommit: (text: string) => void
   onCancel: () => void
-  // Streams the live text on every keystroke so collaborators see it as it's typed.
-  onChange?: (text: string) => void
+  // Streams the live text + caret offset on every keystroke / caret move so collaborators
+  // see the text as it's typed and can render the friend's text cursor at the right spot.
+  onChange?: (text: string, caret: number) => void
 }
 
 // The DOM textarea that overlays a Text Box during editing. The caret must sit on the
@@ -96,6 +97,13 @@ export function TextBoxEditor({
     recenter()
   }, [x, y, width, height, fontSize])
 
+  // Re-publish the caret offset without a text change (arrow keys, clicks, selection drags),
+  // so a friend's cursor follows even when they're just moving around the text.
+  const reportCaret = () => {
+    const el = ref.current
+    if (el) onChange?.(value, el.selectionStart ?? value.length)
+  }
+
   const commit = () => {
     if (done.current) return
     done.current = true
@@ -131,7 +139,7 @@ export function TextBoxEditor({
       value={value}
       onChange={(e) => {
         setValue(e.target.value)
-        onChange?.(e.target.value)
+        onChange?.(e.target.value, e.target.selectionStart ?? e.target.value.length)
         recenter()
       }}
       onKeyDown={(e) => {
@@ -144,6 +152,9 @@ export function TextBoxEditor({
           cancel()
         }
       }}
+      onKeyUp={reportCaret}
+      onClick={reportCaret}
+      onSelect={reportCaret}
       onBlur={commit}
       placeholder='Type here…'
     />
