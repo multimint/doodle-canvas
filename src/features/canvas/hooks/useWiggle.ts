@@ -75,14 +75,29 @@ export function useWiggle(
 
   useEffect(() => { enabledRef.current = enabled }, [enabled])
 
-  // Repaint everything. Markers live on a separate background layer (so the eraser can't
-  // reach them), so we redraw the whole stage rather than just the main layer.
+  // Full repaint (scene + hit canvases). Markers live on a separate background layer (so the
+  // eraser can't reach them), so we redraw the whole stage rather than just the main layer.
+  // Use this after STRUCTURAL changes (strokes added/removed, selection) so the hit graph —
+  // which pointer events test against — stays in sync with the geometry.
   const drawAll = useCallback(() => {
     const layer = layerRef.current
     if (!layer) return
     const stage = layer.getStage()
     if (stage) stage.draw()
     else layer.draw()
+  }, [layerRef])
+
+  // Scene-only repaint for the boil: redraw each layer's VISIBLE canvas but skip the hidden
+  // hit canvas. The boil only jitters geometry by a few px every frame — it never changes
+  // what's clickable — so redrawing the hit graph 12×/s was pure waste. Pointer accuracy is
+  // unaffected: the hit graph stays at the last full draw (a few px is imperceptible) and is
+  // refreshed by drawAll() on every structural change.
+  const drawScenes = useCallback(() => {
+    const layer = layerRef.current
+    if (!layer) return
+    const stage = layer.getStage()
+    if (stage) stage.getLayers().forEach((l) => l.drawScene())
+    else layer.drawScene()
   }, [layerRef])
 
   // Move every registered node to its position for boil frame `fi`. Pure node mutation —
@@ -128,10 +143,10 @@ export function useWiggle(
     if (fi !== lastFrameRef.current) {
       lastFrameRef.current = fi
       applyFrame(fi)
-      drawAll()
+      drawScenes()
     }
     rafRef.current = requestAnimationFrame(tick)
-  }, [applyFrame, drawAll])
+  }, [applyFrame, drawScenes])
 
   const resetAll = useCallback(() => {
     registryRef.current.forEach((entry) => {

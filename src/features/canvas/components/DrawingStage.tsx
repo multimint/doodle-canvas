@@ -21,6 +21,7 @@ import {
   type SimpleStrokeType,
 } from '../render/strokeShapes';
 import { rectToPerimeter, ellipseToPerimeter } from '../utils/wiggleUtils';
+import { strokeBounds } from '../utils/strokeBounds';
 import { WiggleFilters } from './WiggleFilters';
 import { RemoteTextFocus } from './RemoteTextFocus';
 import { RemoteTextCaret } from './RemoteTextCaret';
@@ -222,6 +223,31 @@ export function DrawingStage({
     unregisterLive,
     setFrozenText,
   } = useWiggle(layerRef, wiggle);
+
+  // Viewport culling: the visible canvas rect in world coords (stage x/y = pan, scale = zoom),
+  // padded by 10% so strokes mount just before they scroll into view rather than popping in.
+  // Strokes outside this rect are dropped from the scene entirely, so they cost nothing to draw
+  // or boil — the dominant win once a board accumulates many strokes. Recomputed on pan/zoom
+  // because applyViewport setState-s both. Null until the container has been measured.
+  const cullRect = useMemo<AABB | null>(() => {
+    if (!containerSize.w || !containerSize.h) return null;
+    const left = -pan.x / zoom;
+    const top = -pan.y / zoom;
+    const right = (containerSize.w - pan.x) / zoom;
+    const bottom = (containerSize.h - pan.y) / zoom;
+    const padX = (right - left) * 0.1;
+    const padY = (bottom - top) * 0.1;
+    return { minX: left - padX, minY: top - padY, maxX: right + padX, maxY: bottom + padY };
+  }, [pan.x, pan.y, zoom, containerSize.w, containerSize.h]);
+
+  const inView = useCallback(
+    (s: Stroke) => {
+      if (!cullRect) return true;
+      const b = strokeBounds(s); // null for text/unknown → never culled
+      return b ? aabbOverlap(cullRect, b) : true;
+    },
+    [cullRect],
+  );
 
   // Stable ref callbacks keyed by stroke ID — prevents unregister/register churn on every re-render
   const refCacheRef = useRef<Map<string, (node: Konva.Node | null) => void>>(
@@ -824,6 +850,7 @@ export function DrawingStage({
     return renderShape(s.type as SimpleStrokeType, descriptorFromLive(s), {
       key: `live-${uid}`,
       listening: false,
+      live: true,
     });
   };
 
@@ -908,6 +935,7 @@ export function DrawingStage({
       desc,
       {
         listening: false,
+        live: true,
         // brush is the only sceneFunc Shape; every other drawable tool is a Line, so its
         // live node goes to liveLineCb to be boiled via points-swap.
         ref: tool === 'brush' ? liveShapeCb : liveLineCb,
@@ -978,7 +1006,7 @@ export function DrawingStage({
               over the hole and survives (a newer marker replaces an older erase). */}
           <Layer ref={bgLayerRef}>
             {strokes
-              .filter((s) => s.type === 'marker' || s.type === 'eraser')
+              .filter((s) => (s.type === 'marker' || s.type === 'eraser') && inView(s))
               .map((s) =>
                 s.type === 'marker'
                   ? renderStroke(s)
@@ -993,7 +1021,9 @@ export function DrawingStage({
             {!disabled && renderEraserLiveMask()}
           </Layer>
           <Layer ref={layerRef}>
-            {strokes.filter((s) => s.type !== 'marker').map(renderStroke)}
+            {strokes
+              .filter((s) => s.type !== 'marker' && inView(s))
+              .map(renderStroke)}
             {remoteStrokes &&
               Object.entries(remoteStrokes).map(([uid, s]) =>
                 renderRemoteLiveStroke(uid, s),

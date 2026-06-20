@@ -1,7 +1,14 @@
 import type { StrokeData, ToolType } from '../../../lib/types'
+import { simplifyPoints } from './simplifyPoints'
 
 export const MIN_TEXT_WIDTH = 200
 export const MIN_TEXT_HEIGHT = 80
+
+// Freehand tools sample a point on every mousemove — hundreds of near-collinear vertices for
+// one stroke. tension splines, per-vertex boil variants, and Firebase payloads all scale with
+// that count, so thin out redundant points at commit (RDP, ~0.6px world tolerance). Drawn
+// shape is visually identical; only imperceptible wobble between samples is dropped.
+const SIMPLIFY_TOLERANCE = 0.6
 
 export function buildStrokeData(
   tool: ToolType,
@@ -12,20 +19,20 @@ export function buildStrokeData(
 ): StrokeData {
   if (tool === 'eraser') {
     return {
-      points,
+      points: simplifyPoints(points, SIMPLIFY_TOLERANCE),
       stroke: 'rgba(0,0,0,1)',
       strokeWidth,
       globalCompositeOperation: 'destination-out',
     }
   }
   if (tool === 'pen') {
-    return { points, stroke: color, strokeWidth }
+    return { points: simplifyPoints(points, SIMPLIFY_TOLERANCE), stroke: color, strokeWidth }
   }
   if (tool === 'brush') {
-    return { points, stroke: color, strokeWidth }
+    return { points: simplifyPoints(points, SIMPLIFY_TOLERANCE), stroke: color, strokeWidth }
   }
   if (tool === 'marker') {
-    return { points, stroke: color, strokeWidth }
+    return { points: simplifyPoints(points, SIMPLIFY_TOLERANCE), stroke: color, strokeWidth }
   }
   if (tool === 'line') {
     return { points, stroke: color, strokeWidth }

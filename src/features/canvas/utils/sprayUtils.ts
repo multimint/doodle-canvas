@@ -1,15 +1,33 @@
 import type Konva from 'konva'
-import { jrand } from './wiggleUtils'
+import { jrand, FRAMES } from './wiggleUtils'
 
 // Builds the spray-can stamp pattern for a stroke. Mirrors the reference drawSpraySegment:
 // clusters stepped ~2px along the path, each emitting `density` droplets with a triangular
 // (center-weighted) radial spread. Kept fully deterministic — a fixed LCG seed instead of
 // Math.random — so the same stroke re-sprays identically on every render, after refresh, and
 // across collaborators (the stroke is stored as vector points and re-rendered, never as pixels).
+
+// Hard ceiling on droplets per stroke. Each one is a fill + a boil re-fill 12×/s, so an
+// unbounded count is what tanks both drawing (live regen) and viewing (boil). Strokes below
+// this are untouched and look identical; only long/fat strokes that would blow past it get
+// their cluster spacing widened to land near the budget — the pathological strokes that were
+// actually costing the frames. Keep it a round number so the math stays obvious.
+const MAX_DROPLETS = 2500
+
 export function generateSprayPoints(rawPoints: number[], strokeWidth: number): number[] {
   const radius  = strokeWidth * 2.5                          // broad dispersion (2.5x footprint)
-  const STEP    = 2                                          // px between clusters (ref: dist/2)
   const density = Math.max(3, Math.floor(strokeWidth * 1.5)) // droplets per cluster, scales w/ size
+
+  // Total path length, so we can pick a cluster spacing that keeps the droplet count bounded.
+  let pathLen = 0
+  for (let i = 0; i + 3 < rawPoints.length; i += 2) {
+    pathLen += Math.hypot(rawPoints[i + 2] - rawPoints[i], rawPoints[i + 3] - rawPoints[i + 1])
+  }
+  // Base spacing 2px (≈ the reference app's dist/2); widen it just enough that
+  // (clusters × density) stays under the budget. Short strokes keep the dense 2px spacing.
+  const BASE_STEP = 2
+  const estDroplets = (pathLen / BASE_STEP) * density
+  const STEP = estDroplets > MAX_DROPLETS ? BASE_STEP * (estDroplets / MAX_DROPLETS) : BASE_STEP
   const result: number[] = []
 
   let seed = 1
@@ -54,17 +72,31 @@ export function generateSprayPoints(rawPoints: number[], strokeWidth: number): n
   return result
 }
 
-export function brushSceneFunc(ctx: Konva.Context, shape: Konva.Shape) {
-  // animT carries the shared boil frame index (0..FRAMES-1), set by useWiggle.
-  const frame = (shape.getAttr('animT')      as number)   ?? 0
-  const sp    = (shape.getAttr('sprayPoints') as number[]) ?? []
-  const ds    = (shape.getAttr('dotSize')     as number)   ?? 2
-  const jmag  = (shape.getAttr('jmag')        as number)   ?? 1.5
-  // Use underlying canvas2D for rect() (path method not exposed on Konva.Context).
-  // beginPath/fillShape go through the Konva proxy so hit-canvas colorKey is preserved.
-  const c2d = (ctx as unknown as { _context: CanvasRenderingContext2D })._context
+// Per-stroke spray cache. The droplet pattern depends only on (points, strokeWidth), and a
+// committed stroke hands back the SAME points array reference every render (see
+// descriptorFromStroke), so we memoize on that reference. Without this, every DrawingStage
+// re-render — i.e. every mousemove while drawing — regenerated the full spray (thousands of
+// droplets) for EVERY brush stroke on screen, not just the live one. A WeakMap lets a stroke's
+// entry be collected once its data array is gone (e.g. the stroke is deleted or edited).
+const sprayCache = new WeakMap<number[], { sw: number; spray: number[] }>()
 
-  ctx.beginPath()
+export function sprayFor(points: number[], strokeWidth: number): number[] {
+  const hit = sprayCache.get(points)
+  if (hit && hit.sw === strokeWidth) return hit.spray
+  const spray = generateSprayPoints(points, strokeWidth)
+  sprayCache.set(points, { sw: strokeWidth, spray })
+  return spray
+}
+
+function raw(ctx: Konva.Context): CanvasRenderingContext2D {
+  return (ctx as unknown as { _context: CanvasRenderingContext2D })._context
+}
+
+// Append every droplet of boil frame `frame` to the current path, rounded to the world grid
+// (the historic look). The caller owns beginPath/fill and the fillStyle.
+function pathDroplets(
+  c2d: CanvasRenderingContext2D, sp: number[], frame: number, ds: number, jmag: number,
+) {
   for (let i = 0; i < sp.length; i += 2) {
     const idx = i >>> 1
     // Each dot hops between FRAMES fixed jittered spots — a per-dot, per-frame offset so
@@ -73,5 +105,135 @@ export function brushSceneFunc(ctx: Konva.Context, shape: Konva.Shape) {
     const jy = jrand(idx, frame, 1) * jmag
     c2d.rect(Math.round(sp[i] + jx), Math.round(sp[i + 1] + jy), ds, ds)
   }
-  ctx.fillShape(shape)
+}
+
+// ── 3-frame bitmap cache ──────────────────────────────────────────────────────────────────
+// Re-filling thousands of droplet rects on every boil frame (12×/s, every visible stroke) is
+// the spray draw cost. The boil only ever shows FRAMES fixed jitters, so we rasterize each one
+// to an offscreen canvas ONCE and blit it — turning the per-frame work from O(droplets) into a
+// single drawImage. Frames are baked at the stroke's current on-screen resolution (devicePixel
+// ratio × zoom) so they stay crisp; a >20% zoom change rebuilds them. Keyed on the spray array
+// reference (stable per committed stroke, see sprayFor), so a deleted/edited stroke's frames are
+// GC'd with it. Live and oversized strokes skip the cache and draw droplets directly.
+
+interface FrameCache {
+  color: string
+  ds: number
+  jmag: number
+  pr: number                 // device px per world unit the frames were baked at
+  x: number; y: number       // world-space top-left the frames map to
+  w: number; h: number       // world-space size
+  frames: HTMLCanvasElement[]
+}
+
+// Per-frame pixel budget. Above this a stroke is too big to cache cheaply (a huge sprayed area
+// zoomed in) — fall back to direct droplet drawing rather than allocate a giant canvas ×FRAMES.
+const MAX_FRAME_PX = 4_000_000
+
+const frameCache = new WeakMap<number[], FrameCache>()
+
+function sprayExtent(sp: number[]) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+  for (let i = 0; i < sp.length; i += 2) {
+    const x = sp[i], y = sp[i + 1]
+    if (x < minX) minX = x
+    if (x > maxX) maxX = x
+    if (y < minY) minY = y
+    if (y > maxY) maxY = y
+  }
+  return { minX, minY, maxX, maxY }
+}
+
+function buildFrames(
+  sp: number[], color: string, ds: number, jmag: number, pr: number,
+): FrameCache | null {
+  if (sp.length < 2) return null
+  const pad = jmag + ds + 1 // jitter + dot size can push a droplet just past the raw extent
+  const e = sprayExtent(sp)
+  const x = e.minX - pad, y = e.minY - pad
+  const w = e.maxX - e.minX + pad * 2, h = e.maxY - e.minY + pad * 2
+  const pw = Math.ceil(w * pr), ph = Math.ceil(h * pr)
+  if (pw <= 0 || ph <= 0 || pw * ph > MAX_FRAME_PX) return null
+
+  const frames: HTMLCanvasElement[] = []
+  for (let f = 0; f < FRAMES; f++) {
+    const cv = document.createElement('canvas')
+    cv.width = pw
+    cv.height = ph
+    const c = cv.getContext('2d')
+    if (!c) return null
+    c.scale(pr, pr)        // bake at on-screen resolution
+    c.translate(-x, -y)    // world coords → frame-local
+    c.fillStyle = color
+    c.beginPath()
+    pathDroplets(c, sp, f, ds, jmag)
+    c.fill()
+    frames.push(cv)
+  }
+  return { color, ds, jmag, pr, x, y, w, h, frames }
+}
+
+function framesFor(
+  sp: number[], color: string, ds: number, jmag: number, pr: number,
+): FrameCache | null {
+  const hit = frameCache.get(sp)
+  // Reuse unless style changed or the zoom moved enough to matter (>20%).
+  if (hit && hit.color === color && hit.ds === ds && hit.jmag === jmag &&
+      Math.abs(hit.pr - pr) <= hit.pr * 0.2) {
+    return hit
+  }
+  const built = buildFrames(sp, color, ds, jmag, pr)
+  if (built) frameCache.set(sp, built)
+  return built
+}
+
+export function brushSceneFunc(ctx: Konva.Context, shape: Konva.Shape) {
+  // animT carries the shared boil frame index (0..FRAMES-1), set by useWiggle.
+  const frame = (shape.getAttr('animT')      as number)   ?? 0
+  const sp    = (shape.getAttr('sprayPoints') as number[]) ?? []
+  const ds    = (shape.getAttr('dotSize')     as number)   ?? 2
+  const jmag  = (shape.getAttr('jmag')        as number)   ?? 1.5
+  const live  = (shape.getAttr('live')        as boolean)  ?? false
+  if (sp.length < 2) return
+  const c2d = raw(ctx)
+  const fi = ((frame % FRAMES) + FRAMES) % FRAMES
+
+  // The live stroke's geometry changes every move, so baking 3 frames each time would cost more
+  // than it saves — draw it straight. Committed strokes blit their cached frame.
+  if (!live) {
+    const color = shape.fill() as string
+    const pr = (typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1) *
+      (shape.getAbsoluteScale().x || 1)
+    const fc = framesFor(sp, color, ds, jmag, pr)
+    if (fc) {
+      // c2d already carries the layer's world transform, so place the frame at its world box.
+      c2d.drawImage(fc.frames[fi], fc.x, fc.y, fc.w, fc.h)
+      return
+    }
+    // fc null → stroke too big to cache: fall through to direct draw.
+  }
+
+  c2d.fillStyle = shape.fill() as string
+  c2d.beginPath()
+  pathDroplets(c2d, sp, fi, ds, jmag)
+  c2d.fill()
+}
+
+// Explicit hit region for committed spray strokes (the scene func blits a bitmap, which can't
+// carry the hit colorKey). A fat polyline down the original path is clickable along the whole
+// stroke — enough to double-click-delete. Live strokes pass listening:false, so this never runs
+// for them. The boil only redraws the SCENE canvas, so this fires solely on structural changes.
+export function brushHitFunc(ctx: Konva.Context, shape: Konva.Shape) {
+  const pts = (shape.getAttr('hitPoints') as number[]) ?? []
+  if (pts.length < 2) return
+  const c2d = raw(ctx)
+  // colorKey is Konva's unique per-shape hit colour; painting in it maps hits back to this node.
+  c2d.strokeStyle = (shape as unknown as { colorKey: string }).colorKey
+  c2d.lineWidth = (shape.getAttr('hitWidth') as number) ?? 12
+  c2d.lineCap = 'round'
+  c2d.lineJoin = 'round'
+  c2d.beginPath()
+  c2d.moveTo(pts[0], pts[1])
+  for (let i = 2; i < pts.length; i += 2) c2d.lineTo(pts[i], pts[i + 1])
+  c2d.stroke()
 }

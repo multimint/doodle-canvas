@@ -1,7 +1,7 @@
 import { Line, Shape } from 'react-konva'
 import type Konva from 'konva'
 import type { ReactElement } from 'react'
-import { generateSprayPoints, brushSceneFunc } from '../utils/sprayUtils'
+import { sprayFor, brushSceneFunc, brushHitFunc } from '../utils/sprayUtils'
 import { rectToPerimeter, ellipseToPerimeter, jitterMag } from '../utils/wiggleUtils'
 import type { ShapeDescriptor, SimpleStrokeType } from './strokeDescriptor'
 
@@ -22,6 +22,9 @@ export interface ShapeChrome {
   listening: boolean
   ref?: (node: Konva.Node | null) => void
   onDblClick?: () => void
+  // True for an in-progress stroke (this client's live draw or a remote one). Brush uses it to
+  // skip its bitmap-frame cache, whose geometry would change every frame anyway.
+  live?: boolean
 }
 
 export function renderShape(
@@ -35,6 +38,12 @@ export function renderShape(
     listening: chrome.listening,
     ref: chrome.ref,
     onDblClick: chrome.onDblClick,
+    // Perf: skip Konva's "perfect draw" offscreen buffer (it double-draws every stroked shape
+    // to a temp canvas to hide AA seams — needless for a hand-drawn wiggle look) and the
+    // shadow-on-stroke buffer (no shadows here). Roughly halves per-shape draw cost, and the
+    // boil re-rasterizes every visible shape ~12×/s, so this compounds. No visual change.
+    perfectDrawEnabled: false,
+    shadowForStrokeEnabled: false,
   }
   switch (type) {
     case 'path':
@@ -51,7 +60,9 @@ export function renderShape(
       )
     case 'brush': {
       const sw = d.strokeWidth ?? 6
-      const sprayPoints = generateSprayPoints(d.points, sw)
+      // Cached by the points array reference — recomputed only when the stroke's geometry
+      // actually changes (the growing live stroke), never on unrelated re-renders.
+      const sprayPoints = sprayFor(d.points, sw)
       // Droplets stay the finest 1px size at every brush size — a larger spray spreads wider
       // and denser (radius + density scale in generateSprayPoints), but each speck stays small.
       const dotSize = 1
@@ -60,10 +71,21 @@ export function renderShape(
           {...common}
           fill={d.color}
           sceneFunc={brushSceneFunc}
+          hitFunc={brushHitFunc}
           // Fixed boil amplitude (jitterMag(0), not jitterMag(sw)) so a speck hops the same tiny
           // amount at every brush size — otherwise big brushes smear each 1px dot into a fat blob.
+          // hitPoints/hitWidth feed brushHitFunc (a fat line along the original path covers the
+          // sprayed width); `live` tells the scene func to skip its frame cache for live strokes.
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          {...({ sprayPoints, dotSize, jmag: jitterMag(0), animT: 0 } as any)}
+          {...({
+            sprayPoints,
+            dotSize,
+            jmag: jitterMag(0),
+            animT: 0,
+            live: chrome.live ?? false,
+            hitPoints: d.points,
+            hitWidth: sw * 5,
+          } as any)}
         />
       )
     }

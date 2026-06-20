@@ -16,7 +16,8 @@ interface Props {
 
 const DRAW_TOOLS: { id: ToolType; icon: string; label: string }[] = [
   { id: 'pen',    icon: 'pen',    label: 'Pen' },
-  { id: 'brush',  icon: 'spray',  label: 'Spray' },
+  // Spray temporarily hidden for performance — re-enable once the boil draw cost is resolved.
+  // { id: 'brush',  icon: 'spray',  label: 'Spray' },
   { id: 'marker', icon: 'marker', label: 'Marker' },
   { id: 'line',   icon: 'line',   label: 'Line' },
   { id: 'rect',   icon: 'square', label: 'Rectangle' },
