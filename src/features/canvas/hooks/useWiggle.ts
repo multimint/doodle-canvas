@@ -26,19 +26,19 @@ interface WiggleEntry {
   node: Konva.Node
   kind: WiggleKind
   salt: number
-  base?: number[]        // line: un-jittered points, for reset
-  variants?: number[][]  // line: one jittered point array per frame (built lazily)
-  pendingSW?: number     // strokeWidth stored at register time; present until variants built
+  base?: number[]           // line: un-jittered points, for reset
+  variants?: Float32Array[] // line: jittered variants per frame (Fix 3: typed array, built lazily)
+  pendingSW?: number        // strokeWidth stored at register time; present until variants built
 }
 
 interface LiveEntry {
   node: Konva.Line | Konva.Shape
-  isShape: boolean       // brush → animT; everything else → points swap
+  isShape: boolean          // brush → animT; everything else → points swap
   // The live stroke's clean (un-jittered) points, recomputed by DrawingStage every render.
   // Read instead of node.points() so the boil never feeds on its own jittered output.
   pointsRef?: React.RefObject<number[]>
   base?: number[]
-  variants?: number[][]
+  variants?: Float32Array[] // Fix 3: typed array
 }
 
 function kindFor(type: Stroke['type']): WiggleKind {
@@ -63,23 +63,35 @@ function basePoints(stroke: Stroke): number[] {
   return d.points ?? []
 }
 
+// Konva's points() setter types as number[] but accepts any ArrayLike<number> at runtime.
+// We store Float32Array variants for lower memory/GC; this cast bridges the type gap.
+function setPoints(node: Konva.Line, arr: Float32Array) {
+  node.points(arr as unknown as number[])
+}
+
 export function useWiggle(
   layerRef: React.RefObject<Konva.Layer>,
   enabled: boolean,
 ) {
-  const registryRef    = useRef<Map<string, WiggleEntry>>(new Map())
-  const liveEntryRef   = useRef<LiveEntry | null>(null)
-  const frozenTextRef  = useRef<Set<string>>(new Set())
-  const rafRef         = useRef<number>(0)
-  const lastFrameRef   = useRef<number>(-1)
-  const enabledRef     = useRef(enabled)
-  // Fix 3: IDs of entries whose variants haven't been built yet
+  const registryRef      = useRef<Map<string, WiggleEntry>>(new Map())
+  const liveEntryRef     = useRef<LiveEntry | null>(null)
+  const frozenTextRef    = useRef<Set<string>>(new Set())
+  const rafRef           = useRef<number>(0)
+  const lastFrameRef     = useRef<number>(-1)
+  const enabledRef       = useRef(enabled)
   const pendingBuildsRef = useRef<Set<string>>(new Set())
+  // Fix 2: only run applyFrame when strokes actually changed (react-konva reset node points).
+  // Set by markStrokesDirty() called from DrawingStage during render on strokes/wiggle change.
+  const strokesDirtyRef  = useRef(true)
 
   useEffect(() => { enabledRef.current = enabled }, [enabled])
 
-  // Repaint everything. Markers live on a separate background layer (so the eraser can't
-  // reach them), so we redraw the whole stage rather than just the main layer.
+  // Fix 1: separate draws — main layer only for the rAF tick (bgLayer never changes during
+  // animation), full stage for React commits (new markers/erasers may have just mounted).
+  const drawLayer = useCallback(() => {
+    layerRef.current?.draw()
+  }, [layerRef])
+
   const drawAll = useCallback(() => {
     const layer = layerRef.current
     if (!layer) return
@@ -96,7 +108,7 @@ export function useWiggle(
         entry.node.setAttr('animT', fi)
       } else if (entry.kind === 'line') {
         // variants may be absent if not yet built (initial load deferred); skip cleanly
-        if (entry.variants) (entry.node as Konva.Line).points(entry.variants[fi])
+        if (entry.variants) setPoints(entry.node as Konva.Line, entry.variants[fi])
       } else {
         // text: bump animT so the glyph node's sceneFunc warps the outlines through
         // #wiggle-filter-{fi}. Pause (animT = -1, draw clean) while the box is selected/edited
@@ -109,7 +121,7 @@ export function useWiggle(
     const live = liveEntryRef.current
     if (live && live.node.getLayer()) {
       if (live.isShape) live.node.setAttr('animT', fi)
-      else if (live.variants) (live.node as Konva.Line).points(live.variants[fi])
+      else if (live.variants) setPoints(live.node as Konva.Line, live.variants[fi])
     }
   }, [])
 
@@ -149,10 +161,11 @@ export function useWiggle(
     if (fi !== lastFrameRef.current) {
       lastFrameRef.current = fi
       applyFrame(fi)
-      drawAll()
+      // Fix 1: bgLayer (markers/erasers) never changes during animation — draw main layer only.
+      drawLayer()
     }
     rafRef.current = requestAnimationFrame(tick)
-  }, [applyFrame, drawAll, flushPendingBuilds])
+  }, [applyFrame, drawLayer, flushPendingBuilds])
 
   const resetAll = useCallback(() => {
     registryRef.current.forEach((entry) => {
@@ -179,22 +192,39 @@ export function useWiggle(
     return () => cancelAnimationFrame(rafRef.current)
   }, [enabled, tick, resetAll])
 
-  // After every React commit: if wiggle is on, re-apply offsets and draw synchronously so
-  // react-konva's attr resets are never visible. If off, still draw so prop changes from
-  // reconciliation are visible (autoDrawEnabled=false means Konva won't do it itself).
+  // After every React commit: redraw so Konva shows the latest state. Only call applyFrame
+  // (which iterates all N registered nodes) when strokes actually changed — non-stroke
+  // commits (tool change, color picker, modal open, etc.) don't reset any node's points,
+  // so the rAF-applied jitter is already correct and re-applying is pure waste (Fix 2).
   useLayoutEffect(() => {
     if (enabledRef.current) {
       refreshLiveVariants()
       const pending = pendingBuildsRef.current
+
       if (pending.size <= 5) {
-        // Small pending set (e.g. single new stroke drawn) — build eagerly and jitter in sync
+        // Small pending set (single new stroke): build eagerly and jitter in sync.
         flushPendingBuilds()
-        const fi = frameIndex(performance.now())
-        lastFrameRef.current = fi
-        applyFrame(fi)
+        if (strokesDirtyRef.current) {
+          // Strokes changed — react-konva may have reset node points for new/mutated strokes.
+          const fi = frameIndex(performance.now())
+          lastFrameRef.current = fi
+          applyFrame(fi)
+          strokesDirtyRef.current = false
+        } else {
+          // No stroke changes: only re-apply the live stroke (committed nodes unchanged).
+          const live = liveEntryRef.current
+          if (live?.node.getLayer()) {
+            const fi = frameIndex(performance.now())
+            if (live.isShape) live.node.setAttr('animT', fi)
+            else if (live.variants) setPoints(live.node as Konva.Line, live.variants[fi])
+          }
+        }
+      } else {
+        // Large pending set = initial bulk load: skip applyFrame so the first paint is fast;
+        // the rAF tick will flush and start wiggling one frame later (~16ms).
+        strokesDirtyRef.current = false
       }
-      // Large pending set = initial bulk load: skip applyFrame so the first paint is fast;
-      // the rAF tick will flush and start wiggling one frame later (~16ms).
+      // Fix 1: use stage.draw() here so bgLayer (new markers/erasers from this commit) paint.
       drawAll()
     } else {
       drawAll()
@@ -250,9 +280,16 @@ export function useWiggle(
     if (enabledRef.current) {
       const fi = lastFrameRef.current >= 0 ? lastFrameRef.current : frameIndex(performance.now())
       applyFrame(fi)
-      drawAll()
+      // Fix 1: text nodes are on the main layer; no need to repaint bgLayer.
+      drawLayer()
     }
-  }, [applyFrame, drawAll])
+  }, [applyFrame, drawLayer])
 
-  return { registerStroke, unregisterStroke, registerLive, unregisterLive, setFrozenText }
+  // Fix 2: called by DrawingStage during render when strokes or wiggle prop changes,
+  // so useLayoutEffect knows to re-apply jitter for potentially-reset node points.
+  const markStrokesDirty = useCallback(() => {
+    strokesDirtyRef.current = true
+  }, [])
+
+  return { registerStroke, unregisterStroke, registerLive, unregisterLive, setFrozenText, markStrokesDirty }
 }

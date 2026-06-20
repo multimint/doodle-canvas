@@ -38,14 +38,16 @@ export function hashStr(s: string): number {
 }
 
 // Copy of a flat [x0,y0,x1,y1,...] array with every vertex jittered for a given frame.
+// Returns a Float32Array: contiguous, 4 bytes/element (vs ~48 for boxed number[]), faster
+// to allocate and iterate in Konva's inner draw loop, and lower GC pressure at 2000 strokes.
 export function jitterPoints(
   points: number[],
   frame: number,
   strokeWidth: number,
   salt = 0,
-): number[] {
+): Float32Array {
   const mag = jitterMag(strokeWidth)
-  const out = new Array<number>(points.length)
+  const out = new Float32Array(points.length)
   for (let i = 0; i < points.length; i += 2) {
     const v = i >>> 1
     out[i] = points[i] + jrand(v, frame, salt) * mag
@@ -59,8 +61,8 @@ export function buildVariants(
   points: number[],
   strokeWidth: number,
   salt = 0,
-): number[][] {
-  const variants: number[][] = []
+): Float32Array[] {
+  const variants: Float32Array[] = []
   for (let f = 0; f < FRAMES; f++) {
     variants.push(jitterPoints(points, f, strokeWidth, salt))
   }

@@ -245,7 +245,20 @@ export function DrawingStage({
     registerLive,
     unregisterLive,
     setFrozenText,
+    markStrokesDirty,
   } = useWiggle(layerRef, wiggle);
+
+  // Fix 2: mark dirty during render (before any layout effects fire) when strokes changed
+  // or wiggle was just enabled, so useLayoutEffect knows to re-apply jitter for any node
+  // points reset by react-konva reconciliation. Non-stroke renders (tool change, color, etc.)
+  // leave the flag false — skipping 2000 × node.points() mutations for nothing.
+  const _prevStrokesRef = useRef(strokes);
+  const _prevWiggleRef  = useRef(wiggle);
+  if (_prevStrokesRef.current !== strokes || (_prevWiggleRef.current !== wiggle && wiggle)) {
+    _prevStrokesRef.current = strokes;
+    _prevWiggleRef.current  = wiggle;
+    markStrokesDirty();
+  }
 
   // Stable ref callbacks keyed by stroke ID — prevents unregister/register churn on every re-render
   const refCacheRef = useRef<Map<string, (node: Konva.Node | null) => void>>(
