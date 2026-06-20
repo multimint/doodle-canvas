@@ -1,11 +1,11 @@
 import { useEffect, useRef, useCallback, useState, useMemo } from 'react'
 import { ref, onValue, set, remove, off } from 'firebase/database'
 import { rtdb } from '../../../lib/firebase'
-import type { CursorPos } from '../../../lib/types'
+import type { CursorPos, ToolType } from '../../../lib/types'
 
 const THROTTLE_MS = 50
 
-export function useCursors(canvasId: string, uid: string, color: string) {
+export function useCursors(canvasId: string, uid: string, color: string, tool: ToolType) {
   const [cursors, setCursors] = useState<Record<string, CursorPos>>({})
   const lastEmitRef = useRef(0)
   const cursorRef = useMemo(() => ref(rtdb, `canvases/${canvasId}/cursors/${uid}`), [canvasId, uid])
@@ -32,8 +32,8 @@ export function useCursors(canvasId: string, uid: string, color: string) {
     const now = Date.now()
     if (now - lastEmitRef.current < THROTTLE_MS) return
     lastEmitRef.current = now
-    set(cursorRef, { x, y, color })
-  }, [cursorRef, color])
+    set(cursorRef, { x, y, color, tool })
+  }, [cursorRef, color, tool])
 
   const clearCursor = useCallback(() => {
     remove(cursorRef)

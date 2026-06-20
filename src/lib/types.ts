@@ -53,6 +53,7 @@ export interface CursorPos {
   x: number
   y: number
   color: string
+  tool?: ToolType // the friend's active tool, so their cursor shows what they're holding
 }
 
 export interface PresenceEntry {

@@ -338,6 +338,9 @@
   padding: 1px 5px;
   border-radius: 3px;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 /* Size/area-aware tool cursor (ToolCursor.tsx). The root is moved imperatively via

@@ -87,7 +87,7 @@ export function CanvasPage() {
   }, [canvasId, canvasDoc?.ownerId, uid])
 
   const { strokes, atCap, addStroke, updateStroke, deleteStroke, clearAllStrokes } = useStrokes(canvasId!)
-  const { cursors, emitCursor, clearCursor } = useCursors(canvasId!, uid, userColor)
+  const { cursors, emitCursor, clearCursor } = useCursors(canvasId!, uid, userColor, tool)
   const { remoteStrokes, emitLiveStroke, clearLiveStroke } = useLiveStrokes(canvasId!, uid)
   const { presence } = usePresence({
     canvasId: canvasId!,
