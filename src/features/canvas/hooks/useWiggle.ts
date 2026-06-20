@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
 import Konva from 'konva'
 import type { Stroke } from '../../../lib/types'
-import { frameIndex, buildVariants, nodeJitter, hashStr } from '../utils/wiggleUtils'
+import {
+  frameIndex,
+  buildVariants,
+  hashStr,
+  rectToPerimeter,
+  ellipseToPerimeter,
+} from '../utils/wiggleUtils'
 
 // With autoDrawEnabled=true (default), every points()/x()/y() mutation in applyFrame
 // calls _requestDraw() → batchDraw() — scheduling async deferred draws that can race
@@ -27,6 +33,9 @@ interface WiggleEntry {
 interface LiveEntry {
   node: Konva.Line | Konva.Shape
   isShape: boolean       // brush → animT; everything else → points swap
+  // The live stroke's clean (un-jittered) points, recomputed by DrawingStage every render.
+  // Read instead of node.points() so the boil never feeds on its own jittered output.
+  pointsRef?: React.RefObject<number[]>
   base?: number[]
   variants?: number[][]
 }
@@ -35,6 +44,22 @@ function kindFor(type: Stroke['type']): WiggleKind {
   if (type === 'brush') return 'shape'
   if (type === 'text') return 'text'
   return 'line'
+}
+
+// The clean, un-jittered points the line node is rendered with — pulled from the stroke's
+// stored data, NEVER from node.points() (which the boil overwrites with jittered variants).
+// Reading the node back would let each register/refresh build a variant on top of the last
+// one's jitter, so the stroke would grow a little every time. Mirrors strokeShapes.tsx so
+// the base lines up vertex-for-vertex with what's drawn (rect/circle trace their outline).
+function basePoints(stroke: Stroke): number[] {
+  const d = stroke.data ?? {}
+  if (stroke.type === 'rect') {
+    return rectToPerimeter(d.x ?? 0, d.y ?? 0, d.width ?? 0, d.height ?? 0)
+  }
+  if (stroke.type === 'circle') {
+    return ellipseToPerimeter(d.x ?? 0, d.y ?? 0, d.radiusX ?? 0, d.radiusY ?? 0)
+  }
+  return d.points ?? []
 }
 
 export function useWiggle(
@@ -69,15 +94,11 @@ export function useWiggle(
       } else if (entry.kind === 'line') {
         if (entry.variants) (entry.node as Konva.Line).points(entry.variants[fi])
       } else {
-        // text: pause the boil while the box is selected/edited so handles + the editor
-        // textarea stay aligned with the glyphs.
+        // text: bump animT so the glyph node's sceneFunc warps the outlines through
+        // #wiggle-filter-{fi}. Pause (animT = -1, draw clean) while the box is selected/edited
+        // so handles + the editor textarea stay aligned with the glyphs.
         const frozen = frozenTextRef.current.has(entry.node.id())
-        if (frozen) {
-          entry.node.x(0); entry.node.y(0)
-        } else {
-          const [jx, jy] = nodeJitter(entry.salt, fi)
-          entry.node.x(jx); entry.node.y(jy)
-        }
+        entry.node.setAttr('animT', frozen ? -1 : fi)
       }
     })
 
@@ -93,8 +114,9 @@ export function useWiggle(
   const refreshLiveVariants = useCallback(() => {
     const live = liveEntryRef.current
     if (!live || live.isShape || !live.node.getLayer()) return
+    const base = live.pointsRef?.current
+    if (!base) return
     const node = live.node as Konva.Line
-    const base = node.points()
     live.base = base
     live.variants = buildVariants(base, node.strokeWidth(), 0)
   }, [])
@@ -115,7 +137,7 @@ export function useWiggle(
     registryRef.current.forEach((entry) => {
       if (entry.kind === 'shape') entry.node.setAttr('animT', 0)
       else if (entry.kind === 'line' && entry.base) (entry.node as Konva.Line).points(entry.base)
-      else if (entry.kind === 'text') { entry.node.x(0); entry.node.y(0) }
+      else if (entry.kind === 'text') entry.node.setAttr('animT', -1)
     })
     const live = liveEntryRef.current
     if (live) {
@@ -152,12 +174,15 @@ export function useWiggle(
   })
 
   const registerStroke = useCallback((id: string, node: Konva.Node, stroke: Stroke) => {
+    // Never boil the eraser: a wiggling cut edge oscillates frame-to-frame and lets the
+    // boiling spray dots underneath flash into the area you just erased. A static hole holds.
+    if (stroke.type === 'eraser') return
     const kind = kindFor(stroke.type)
     const salt = hashStr(id)
     const entry: WiggleEntry = { node, kind, salt }
     if (kind === 'line') {
       const line = node as Konva.Line
-      const base = line.points()
+      const base = basePoints(stroke)
       entry.base = base
       entry.variants = buildVariants(base, line.strokeWidth(), salt)
     }
@@ -171,11 +196,12 @@ export function useWiggle(
   const registerLive = useCallback((
     node: Konva.Line | Konva.Shape,
     isShape: boolean,
+    pointsRef?: React.RefObject<number[]>,
   ) => {
-    const entry: LiveEntry = { node, isShape }
+    const entry: LiveEntry = { node, isShape, pointsRef }
     if (!isShape) {
       const line = node as Konva.Line
-      const base = line.points()
+      const base = pointsRef?.current ?? []
       entry.base = base
       entry.variants = buildVariants(base, line.strokeWidth(), 0)
     }

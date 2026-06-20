@@ -20,6 +20,8 @@ import {
   descriptorFromLive,
   type SimpleStrokeType,
 } from '../render/strokeShapes';
+import { rectToPerimeter, ellipseToPerimeter } from '../utils/wiggleUtils';
+import { WiggleFilters } from './WiggleFilters';
 import { TextBoxNode } from './TextBoxNode';
 import { BoxControls } from './BoxControls';
 import { MultiSelectOverlay } from './MultiSelectOverlay';
@@ -88,6 +90,10 @@ export function DrawingStage({
   const bgLayerRef = useRef<Konva.Layer>(null);
   const liveLineRef = useRef<Konva.Line | null>(null);
   const liveShapeRef = useRef<Konva.Shape | null>(null);
+  // The live line's clean (un-jittered) points, captured each render in renderLiveStroke and
+  // handed to the wiggle hook so its boil rebuilds from the source geometry rather than from
+  // node.points() (which it has already overwritten with a jittered variant).
+  const liveBaseRef = useRef<number[]>([]);
 
   // Size/area-aware follower cursor. Positioned imperatively (see handleMouseMove) so it
   // tracks the pointer without re-rendering. Only shown for fine pointers (mouse); touch
@@ -774,7 +780,9 @@ export function DrawingStage({
   };
 
   useEffect(() => {
-    if (livePoints.length >= 4) {
+    // The eraser is never boiled — a wiggling hole exposes the spray/strokes underneath
+    // (dots appear to jump into the erased area). It still renders + erases, just statically.
+    if (livePoints.length >= 4 && tool !== 'eraser') {
       // brush is a sceneFunc Shape (animT boil); every other drawable tool is a Line
       // whose points are swapped per frame.
       if (tool === 'brush') {
@@ -782,7 +790,7 @@ export function DrawingStage({
         if (node) registerLive(node, true);
       } else {
         const node = liveLineRef.current;
-        if (node) registerLive(node, false);
+        if (node) registerLive(node, false, liveBaseRef);
       }
     } else {
       unregisterLive();
@@ -837,15 +845,39 @@ export function DrawingStage({
       return null; // hand / select don't draw
     }
     const type: SimpleStrokeType = tool === 'pen' ? 'path' : tool;
+    const desc = descriptorFromLive({ type, points: livePoints, color, strokeWidth });
+    // Capture the exact points renderShape will assign to the node — rect/circle trace
+    // their outline, every other line uses its raw points — so the wiggle hook boils from
+    // this clean geometry instead of reading back the jittered node.
+    liveBaseRef.current =
+      type === 'rect'
+        ? rectToPerimeter(desc.x, desc.y, desc.width, desc.height)
+        : type === 'circle'
+          ? ellipseToPerimeter(desc.x, desc.y, desc.radiusX, desc.radiusY)
+          : desc.points;
     return renderShape(
       type,
-      descriptorFromLive({ type, points: livePoints, color, strokeWidth }),
+      desc,
       {
         listening: false,
         // brush is the only sceneFunc Shape; every other drawable tool is a Line, so its
         // live node goes to liveLineCb to be boiled via points-swap.
         ref: tool === 'brush' ? liveShapeCb : liveLineCb,
       },
+    );
+  };
+
+  // Eraser masks for the marker layer. The eraser's destination-out only cuts the canvas of
+  // the layer it's drawn on, so the copy on the main layer can't reach markers (they live on
+  // their own background layer). Re-drawing each eraser stroke here — after the markers — lets
+  // the same cut fall on the marker canvas too. These are static (no wiggle ref/listening):
+  // the boiling copy on the main layer owns the registry entry, and an unseen mask needn't boil.
+  const renderEraserLiveMask = () => {
+    if (tool !== 'eraser' || livePoints.length < 4) return null;
+    return renderShape(
+      'eraser',
+      descriptorFromLive({ type: 'eraser', points: livePoints, color, strokeWidth }),
+      { listening: false },
     );
   };
 
@@ -863,6 +895,8 @@ export function DrawingStage({
       ref={containerRef}
       style={{ position: 'relative' }}
     >
+      {/* Hidden SVG displacement filters that the Text Box boil warps glyph outlines through. */}
+      <WiggleFilters />
       {containerSize.w > 0 && (
         <Stage
           ref={stageRef}
@@ -887,12 +921,28 @@ export function DrawingStage({
           onTouchEnd={handleTouchEnd}
           style={{ cursor }}
         >
-          {/* Background layer: markers only. Sits behind the main layer and the eraser's
-              destination-out can't reach it, so markers are always behind everything and
-              never erased. */}
+          {/* Background layer: markers + eraser masks, interleaved in chronological
+              (timestamp-sorted) order. Sits behind the main layer so markers are always
+              behind everything. The eraser strokes are re-drawn here so their destination-out
+              cuts the marker canvas too — without this copy, markers on their own layer could
+              never be erased. Order matters: destination-out only cuts what's already painted,
+              so an eraser clears markers drawn BEFORE it, while a marker drawn AFTER paints
+              over the hole and survives (a newer marker replaces an older erase). */}
           <Layer ref={bgLayerRef}>
-            {strokes.filter((s) => s.type === 'marker').map(renderStroke)}
+            {strokes
+              .filter((s) => s.type === 'marker' || s.type === 'eraser')
+              .map((s) =>
+                s.type === 'marker'
+                  ? renderStroke(s)
+                  : renderShape('eraser', descriptorFromStroke(s.data), {
+                      key: `erase-mask-${s.id}`,
+                      listening: false,
+                    }),
+              )}
+            {/* Live stroke is the newest, so it goes last. Tools are mutually exclusive, so
+                at most one of these renders. */}
             {!disabled && tool === 'marker' && renderLiveStroke()}
+            {!disabled && renderEraserLiveMask()}
           </Layer>
           <Layer ref={layerRef}>
             {strokes.filter((s) => s.type !== 'marker').map(renderStroke)}

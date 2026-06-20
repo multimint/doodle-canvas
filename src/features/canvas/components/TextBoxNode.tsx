@@ -3,6 +3,7 @@ import type Konva from 'konva'
 import type { Stroke, StrokeData, ToolType } from '../../../lib/types'
 import { MIN_TEXT_WIDTH, MIN_TEXT_HEIGHT } from '../utils/strokeSerializer'
 import { DOODLE_FONT } from '../../../lib/fonts'
+import { wigglyTextSceneFunc, wigglyTextHitFunc } from '../render/wigglyText'
 import type { RotBox } from '../utils/textBoxGeometry'
 import { BoxControls } from './BoxControls'
 import type { ActiveBox, XformBox } from './textBoxTypes'
@@ -131,6 +132,8 @@ export function TextBoxNode({
         align='center'
         verticalAlign='middle'
         visible={!editingThis}
+        sceneFunc={wigglyTextSceneFunc}
+        hitFunc={wigglyTextHitFunc}
       />
       {isActive && (
         <BoxControls

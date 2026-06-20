@@ -1,10 +1,15 @@
 import type Konva from 'konva'
 import { jrand } from './wiggleUtils'
 
+// Builds the spray-can stamp pattern for a stroke. Mirrors the reference drawSpraySegment:
+// clusters stepped ~2px along the path, each emitting `density` droplets with a triangular
+// (center-weighted) radial spread. Kept fully deterministic — a fixed LCG seed instead of
+// Math.random — so the same stroke re-sprays identically on every render, after refresh, and
+// across collaborators (the stroke is stored as vector points and re-rendered, never as pixels).
 export function generateSprayPoints(rawPoints: number[], strokeWidth: number): number[] {
-  const radius       = strokeWidth * 2.5
-  const STEP         = Math.max(1, strokeWidth / 3)  // pixels between clusters along path
-  const PER_CLUSTER  = 16                             // dots per cluster
+  const radius  = strokeWidth * 2.5                          // broad dispersion (2.5x footprint)
+  const STEP    = 2                                          // px between clusters (ref: dist/2)
+  const density = Math.max(3, Math.floor(strokeWidth * 1.5)) // droplets per cluster, scales w/ size
   const result: number[] = []
 
   let seed = 1
@@ -14,9 +19,11 @@ export function generateSprayPoints(rawPoints: number[], strokeWidth: number): n
   }
 
   const place = (cx: number, cy: number) => {
-    for (let j = 0; j < PER_CLUSTER; j++) {
+    for (let p = 0; p < density; p++) {
       const angle = rand() * Math.PI * 2
-      const dist  = rand() * rand() * radius  // quadratic: dense at center, sparse at edge
+      // Triangular distribution: averaging two seeds pulls most droplets toward the center.
+      const centerWeight = (rand() + rand()) * 0.5
+      const dist = centerWeight * radius
       result.push(cx + Math.cos(angle) * dist, cy + Math.sin(angle) * dist)
     }
   }

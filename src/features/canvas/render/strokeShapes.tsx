@@ -52,14 +52,18 @@ export function renderShape(
     case 'brush': {
       const sw = d.strokeWidth ?? 6
       const sprayPoints = generateSprayPoints(d.points, sw)
-      const dotSize = Math.max(1, Math.floor(sw / 6))
+      // Droplets stay the finest 1px size at every brush size — a larger spray spreads wider
+      // and denser (radius + density scale in generateSprayPoints), but each speck stays small.
+      const dotSize = 1
       return (
         <Shape
           {...common}
           fill={d.color}
           sceneFunc={brushSceneFunc}
+          // Fixed boil amplitude (jitterMag(0), not jitterMag(sw)) so a speck hops the same tiny
+          // amount at every brush size — otherwise big brushes smear each 1px dot into a fat blob.
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          {...({ sprayPoints, dotSize, jmag: jitterMag(sw), animT: 0 } as any)}
+          {...({ sprayPoints, dotSize, jmag: jitterMag(0), animT: 0 } as any)}
         />
       )
     }
