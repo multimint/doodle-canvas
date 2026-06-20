@@ -1,60 +1,72 @@
-import { Group, Rect, Label, Tag, Text } from 'react-konva'
 import type { Stroke, TextFocus } from '../../../lib/types'
 import { MIN_TEXT_WIDTH, MIN_TEXT_HEIGHT } from '../utils/strokeSerializer'
+import type { Camera } from '../engine/camera'
 
 interface Props {
   focuses: { uid: string; focus: TextFocus }[]
   strokes: Stroke[]
   displayNames: Record<string, string>
-  zoom: number
+  cam: Camera
 }
 
-// Draws, for each friend focused on a Text Box, a coloured outline around that box plus a
-// name tag — dashed while they have it merely selected, solid + thicker while they're editing.
-// Rendered inside the Konva layer so it pans/zooms/rotates with the box automatically. Sizes
-// are divided by zoom so the outline weight and label stay a constant thickness on screen.
-export function RemoteTextFocus({ focuses, strokes, displayNames, zoom }: Props) {
+// For each friend focused on a Text Box: a coloured outline + name tag — dashed while merely
+// selected, solid + thicker while editing. A DOM overlay (was a Konva group): the box is
+// positioned in screen space via the camera and rotated about its centre, so outline weight and
+// label stay a constant on-screen size (no per-zoom division needed).
+export function RemoteTextFocus({ focuses, strokes, displayNames, cam }: Props) {
   return (
     <>
       {focuses.map(({ uid, focus }) => {
         const s = strokes.find((st) => st.id === focus.boxId && st.type === 'text')
         if (!s) return null
         const d = s.data
-        const w = d.width ?? MIN_TEXT_WIDTH
-        const h = d.height ?? MIN_TEXT_HEIGHT
-        const x = d.x ?? 0
-        const y = d.y ?? 0
+        const w = (d.width ?? MIN_TEXT_WIDTH) * cam.zoom
+        const h = (d.height ?? MIN_TEXT_HEIGHT) * cam.zoom
+        const left = (d.x ?? 0) * cam.zoom + cam.panX
+        const top = (d.y ?? 0) * cam.zoom + cam.panY
         const rot = d.rotation ?? 0
         const name = displayNames[uid] ?? uid.slice(0, 6)
         return (
-          <Group
+          <div
             key={uid}
-            x={x + w / 2}
-            y={y + h / 2}
-            offsetX={w / 2}
-            offsetY={h / 2}
-            rotation={rot}
-            listening={false}
+            style={{
+              position: 'absolute',
+              left,
+              top,
+              width: w,
+              height: h,
+              transform: `rotate(${rot}deg)`,
+              transformOrigin: 'center center',
+              pointerEvents: 'none',
+              zIndex: 4,
+            }}
           >
-            <Rect
-              width={w}
-              height={h}
-              stroke={focus.color}
-              strokeWidth={(focus.editing ? 2.5 : 2) / zoom}
-              dash={focus.editing ? undefined : [7 / zoom, 4 / zoom]}
-              cornerRadius={4 / zoom}
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                border: `${focus.editing ? 2.5 : 2}px ${focus.editing ? 'solid' : 'dashed'} ${focus.color}`,
+                borderRadius: 4,
+                boxSizing: 'border-box',
+              }}
             />
-            <Label y={-22 / zoom}>
-              <Tag fill={focus.color} cornerRadius={3 / zoom} />
-              <Text
-                text={name}
-                fontSize={12 / zoom}
-                fontFamily="Quicksand, system-ui, sans-serif"
-                fill="#fff"
-                padding={3 / zoom}
-              />
-            </Label>
-          </Group>
+            <div
+              style={{
+                position: 'absolute',
+                top: -22,
+                left: 0,
+                background: focus.color,
+                color: '#fff',
+                fontSize: 12,
+                fontFamily: 'Quicksand, system-ui, sans-serif',
+                padding: '3px 5px',
+                borderRadius: 3,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {name}
+            </div>
+          </div>
         )
       })}
     </>

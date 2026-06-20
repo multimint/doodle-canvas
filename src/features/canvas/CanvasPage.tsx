@@ -3,7 +3,6 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { doc, onSnapshot, updateDoc, deleteField } from 'firebase/firestore'
 import { ref, get, set } from 'firebase/database'
 import { linkWithPopup, signInWithPopup, GoogleAuthProvider } from 'firebase/auth'
-import type Konva from 'konva'
 import { auth, db, rtdb } from '../../lib/firebase'
 import { useAuth } from '../auth/useAuth'
 import { useStrokes } from './hooks/useStrokes'
@@ -13,9 +12,9 @@ import { usePresence } from './hooks/usePresence'
 import { useUndoStack } from './hooks/useUndoStack'
 import { useLiveStrokes } from './hooks/useLiveStrokes'
 import type { LiveStroke } from './hooks/useLiveStrokes'
-import { DrawingStage } from './components/DrawingStage'
+import { CanvasStage } from './components/CanvasStage'
 import { stepStrokeWidth } from './utils/strokeSize'
-import type { NavHandle } from './components/DrawingStage'
+import type { NavHandle } from './hooks/useCamera'
 import { CanvasTopBar } from './components/CanvasTopBar'
 import { useCanvasKeyboard } from './hooks/useCanvasKeyboard'
 import { Toolbar } from './components/Toolbar'
@@ -45,7 +44,6 @@ export function CanvasPage() {
     title: string; message: string; confirmLabel: string; danger?: boolean; onConfirm: () => void
   } | null>(null)
 
-  const stageRef      = useRef<Konva.Stage>(null)
   const navRef        = useRef<NavHandle | null>(null)
   const minimapHandle = useRef<MinimapHandle | null>(null)
   const toolRef = useRef<ToolType>('pen')
@@ -305,7 +303,7 @@ export function CanvasPage() {
           }}
           className="m-canvas-surface"
         >
-          <DrawingStage
+          <CanvasStage
             strokes={strokes}
             tool={tool}
             color={color}
@@ -319,7 +317,6 @@ export function CanvasPage() {
             onToolChange={setTool}
             onResizeStroke={handleResizeStroke}
             onViewportChange={handleViewportChange}
-            stageRef={stageRef}
             navRef={navRef}
             overlay={<CursorOverlay cursors={cursors} zoom={viewport.zoom} pan={viewport.pan} displayNames={displayNames} />}
             remoteStrokes={remoteStrokes}
@@ -334,8 +331,8 @@ export function CanvasPage() {
           />
           {!isMobile && (
             <>
-              <ZoomControls navHandle={navRef} stageRef={stageRef} viewport={viewport} minimapHandle={minimapHandle} />
-              <Minimap navHandle={navRef} stageRef={stageRef} viewport={viewport} strokes={strokes} minimapHandle={minimapHandle} />
+              <ZoomControls navHandle={navRef} viewport={viewport} minimapHandle={minimapHandle} />
+              <Minimap navHandle={navRef} viewport={viewport} strokes={strokes} minimapHandle={minimapHandle} />
             </>
           )}
         </div>

@@ -9,7 +9,6 @@ export default defineConfig({
       output: {
         manualChunks: {
           firebase: ['firebase/app', 'firebase/auth', 'firebase/firestore', 'firebase/database', 'firebase/storage'],
-          konva: ['konva', 'react-konva'],
         },
       },
     },

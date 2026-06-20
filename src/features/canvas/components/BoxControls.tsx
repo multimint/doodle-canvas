@@ -1,185 +1,179 @@
-import { Line, Rect } from 'react-konva'
-import type Konva from 'konva'
+import { useRef } from 'react'
 import {
   handleAnchor,
   resizeFromPointer,
   RESIZE_HANDLES,
+  type HandleRole,
   type RotBox,
 } from '../utils/textBoxGeometry'
 
-// Selection chrome (dashed border + rotate knob + 8 resize handles, plus an optional
-// edit catcher) for the active Text Box. Rendered as CHILDREN of a Group that is
-// already positioned at the box centre and rotated, so local coords (0,0)..(w,h)
-// trace the box. Because it lives in the same Group as the box's <Text>, a move-drag
-// of that Group carries the border with the text — no React-state lag / desync.
-// Handle drags compute geometry in world space (via the box's fixed start frame) and
-// report it through onChange; onCommit persists on release.
-export function BoxControls({
-  w,
-  h,
-  zoom,
-  editing,
-  stageRef,
-  handleStartRef,
-  geom,
-  onChange,
-  onCommit,
-  lockAspect = false as boolean | number,
-  minSize,
-}: {
-  w: number
-  h: number
+// Selection chrome (dashed border + rotate knob + 8 resize handles) for the active Text Box /
+// sticker, as a DOM overlay. The old version rendered these as Konva nodes inside a rotated
+// group; here we position a single rotated <div> at the box's screen rectangle and lay the
+// handles out in its local frame, so a constant on-screen handle size needs no per-zoom scaling.
+// Handle drags reuse the exact same world-space resize/rotate math (textBoxGeometry), driven by
+// a toWorld() converter the stage supplies. onChange streams live geometry; onCommit persists.
+
+const HS = 11 // handle size, constant screen px
+const ROT_GAP = 26 // rotate-knob gap above the top edge, screen px
+const ACCENT = '#3d5afe'
+
+interface Props {
+  box: RotBox // world geometry
   zoom: number
-  editing: boolean
-  stageRef: React.RefObject<Konva.Stage>
+  pan: { x: number; y: number }
+  // Convert a client (page) point to world coords (stage-supplied; accounts for camera + rect).
+  toWorld: (clientX: number, clientY: number) => { x: number; y: number }
   handleStartRef: React.MutableRefObject<RotBox | null>
-  geom: RotBox
   onChange: (p: Partial<RotBox>) => void
-  onCommit: () => void
+  // Receives the FINAL geometry so the parent persists what the drag actually ended on
+  // (passing it through avoids a stale closure over the parent's pre-drag state).
+  onCommit: (box: RotBox) => void
   lockAspect?: boolean | number
   minSize?: number
-}) {
-  const hs = 11 / zoom
-  const rotGap = 26 / zoom
+}
+
+export function BoxControls({
+  box,
+  zoom,
+  pan,
+  toWorld,
+  handleStartRef,
+  onChange,
+  onCommit,
+  lockAspect = false,
+  minSize,
+}: Props) {
+  const cw = box.width * zoom
+  const ch = box.height * zoom
+  const left = box.x * zoom + pan.x
+  const top = box.y * zoom + pan.y
   const st0: RotBox = {
-    x: geom.x,
-    y: geom.y,
-    width: geom.width,
-    height: geom.height,
-    rotation: geom.rotation,
+    x: box.x,
+    y: box.y,
+    width: box.width,
+    height: box.height,
+    rotation: box.rotation,
   }
+
+  // Latest geometry during a drag, so onCommit persists the FINAL value (the pointerup
+  // listener is attached once at drag-start, so it can't read the parent's updated state).
+  const latest = useRef<RotBox>(st0)
+
+  // Start a handle drag: capture the pointer so move/up fire on the handle even as the cursor
+  // leaves it, and freeze the box's start frame for stable resize math.
+  const startDrag = (
+    e: React.PointerEvent,
+    compute: (wp: { x: number; y: number }) => Partial<RotBox>,
+  ) => {
+    e.preventDefault()
+    e.stopPropagation()
+    handleStartRef.current = st0
+    latest.current = st0
+    const el = e.currentTarget as HTMLElement
+    el.setPointerCapture(e.pointerId)
+    const move = (ev: PointerEvent) => {
+      const patch = compute(toWorld(ev.clientX, ev.clientY))
+      latest.current = { ...latest.current, ...patch }
+      onChange(patch)
+    }
+    const up = (ev: PointerEvent) => {
+      el.releasePointerCapture(ev.pointerId)
+      el.removeEventListener('pointermove', move)
+      el.removeEventListener('pointerup', up)
+      onCommit(latest.current)
+    }
+    el.addEventListener('pointermove', move)
+    el.addEventListener('pointerup', up)
+  }
+
+  const handleStyle = (lx: number, ly: number, cursor: string): React.CSSProperties => ({
+    position: 'absolute',
+    left: lx - HS / 2,
+    top: ly - HS / 2,
+    width: HS,
+    height: HS,
+    background: '#fff',
+    border: `1.5px solid ${ACCENT}`,
+    borderRadius: 2,
+    boxSizing: 'border-box',
+    cursor,
+    pointerEvents: 'auto',
+    touchAction: 'none',
+  })
+
   return (
-    <>
-      {/* Full-box catcher (edit only): mousedown preventDefault keeps the textarea
-          focused, so clicking the empty box area never commits. */}
-      {editing && (
-        <Rect
-          x={0}
-          y={0}
-          width={w}
-          height={h}
-          fill='transparent'
-          onMouseDown={(e) => {
-            e.evt.preventDefault()
-          }}
-        />
-      )}
-      <Rect
-        x={0}
-        y={0}
-        width={w}
-        height={h}
-        stroke='#3d5afe'
-        strokeWidth={1.5 / zoom}
-        dash={[6 / zoom, 4 / zoom]}
-        listening={false}
-      />
-      {/* Rotate knob above the top edge */}
-      <Line
-        points={[w / 2, 0, w / 2, -rotGap]}
-        stroke='#3d5afe'
-        strokeWidth={1.5 / zoom}
-        listening={false}
-      />
-      <Rect
-        x={w / 2 - hs / 2}
-        y={-rotGap - hs / 2}
-        width={hs}
-        height={hs}
-        cornerRadius={hs / 2}
-        fill='#ffffff'
-        stroke='#3d5afe'
-        strokeWidth={1.5 / zoom}
-        hitStrokeWidth={22 / zoom}
-        draggable
-        onMouseDown={(e) => {
-          e.evt.preventDefault()
-        }}
-        onMouseEnter={(e) => {
-          const c = e.target.getStage()?.container()
-          if (c) c.style.cursor = 'grab'
-        }}
-        onMouseLeave={(e) => {
-          // While rotating, the pointer orbits away from the knob and fires mouseleave —
-          // keep the grabbing cursor until the drag ends instead of snapping to default.
-          if (e.target.isDragging()) return
-          const c = e.target.getStage()?.container()
-          if (c) c.style.cursor = 'default'
-        }}
-        onDragStart={(e) => {
-          handleStartRef.current = st0
-          const c = e.target.getStage()?.container()
-          if (c) c.style.cursor = 'grabbing'
-        }}
-        onDragMove={(e) => {
-          const st = handleStartRef.current
-          const wp = stageRef.current?.getRelativePointerPosition()
-          if (!st || !wp) return
-          const cx = st.x + st.width / 2,
-            cy = st.y + st.height / 2
-          const ang = (Math.atan2(wp.y - cy, wp.x - cx) * 180) / Math.PI + 90
-          onChange({ rotation: ang })
-          e.target.position({ x: st.width / 2 - hs / 2, y: -rotGap - hs / 2 })
-        }}
-        onDragEnd={(e) => {
-          onCommit()
-          const c = e.target.getStage()?.container()
-          if (c) c.style.cursor = 'default'
+    <div
+      style={{
+        position: 'absolute',
+        left,
+        top,
+        width: cw,
+        height: ch,
+        transform: `rotate(${box.rotation}deg)`,
+        transformOrigin: 'center center',
+        pointerEvents: 'none',
+        zIndex: 5,
+      }}
+    >
+      {/* Dashed border */}
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          border: `1.5px dashed ${ACCENT}`,
+          boxSizing: 'border-box',
         }}
       />
-      {/* 8 resize handles, math done in the box's fixed start frame */}
-      {RESIZE_HANDLES.map(({ role, cursor: hCursor }) => {
-        const a = handleAnchor(role, { x: 0, y: 0, width: w, height: h })
+      {/* Rotate stem + knob */}
+      <div
+        style={{
+          position: 'absolute',
+          left: cw / 2,
+          top: -ROT_GAP,
+          width: 1.5,
+          height: ROT_GAP,
+          background: ACCENT,
+          transform: 'translateX(-50%)',
+        }}
+      />
+      <div
+        style={{ ...handleStyle(cw / 2, -ROT_GAP, 'grab'), borderRadius: HS / 2 }}
+        onPointerDown={(e) =>
+          startDrag(e, (wp) => {
+            const st = handleStartRef.current
+            if (!st) return {}
+            const cx = st.x + st.width / 2
+            const cy = st.y + st.height / 2
+            const ang = (Math.atan2(wp.y - cy, wp.x - cx) * 180) / Math.PI + 90
+            return { rotation: ang }
+          })
+        }
+      />
+      {/* 8 resize handles, anchored in the box-local (screen-scaled) frame */}
+      {RESIZE_HANDLES.map(({ role, cursor }) => {
+        const a = handleAnchor(role as HandleRole, { x: 0, y: 0, width: cw, height: ch })
         return (
-          <Rect
+          <div
             key={role}
-            x={a.x - hs / 2}
-            y={a.y - hs / 2}
-            width={hs}
-            height={hs}
-            fill='#ffffff'
-            stroke='#3d5afe'
-            strokeWidth={1.5 / zoom}
-            hitStrokeWidth={22 / zoom}
-            draggable
-            onMouseDown={(e) => {
-              e.evt.preventDefault()
-            }}
-            onMouseEnter={(e) => {
-              const c = e.target.getStage()?.container()
-              if (c) c.style.cursor = hCursor
-            }}
-            onMouseLeave={(e) => {
-              const c = e.target.getStage()?.container()
-              if (c) c.style.cursor = 'default'
-            }}
-            onDragStart={() => {
-              handleStartRef.current = st0
-            }}
-            onDragMove={(e) => {
-              const st = handleStartRef.current
-              const wp = stageRef.current?.getRelativePointerPosition()
-              if (!st || !wp) return
-              const nb = resizeFromPointer(role, st, wp, lockAspect, minSize, minSize)
-              onChange({
-                x: nb.x,
-                y: nb.y,
-                width: nb.width,
-                height: nb.height,
-                rotation: nb.rotation,
+            style={handleStyle(a.x, a.y, cursor)}
+            onPointerDown={(e) =>
+              startDrag(e, (wp) => {
+                const st = handleStartRef.current
+                if (!st) return {}
+                const nb = resizeFromPointer(role, st, wp, lockAspect, minSize, minSize)
+                return {
+                  x: nb.x,
+                  y: nb.y,
+                  width: nb.width,
+                  height: nb.height,
+                  rotation: nb.rotation,
+                }
               })
-              const la = handleAnchor(role, {
-                x: 0,
-                y: 0,
-                width: nb.width,
-                height: nb.height,
-              })
-              e.target.position({ x: la.x - hs / 2, y: la.y - hs / 2 })
-            }}
-            onDragEnd={onCommit}
+            }
           />
         )
       })}
-    </>
+    </div>
   )
 }

@@ -1,7 +1,7 @@
 import { useRef, useEffect, useCallback } from 'react'
-import type Konva from 'konva'
 import type { Stroke } from '../../../lib/types'
-import type { NavHandle } from './DrawingStage'
+import type { NavHandle } from '../hooks/useCamera'
+import { drawCommitted } from '../engine/scene'
 import {
   MM_W, MM_H, GRAY_PX, WHITE_W, WHITE_H, CANVAS_W, CANVAS_H,
   CACHE_X, CACHE_Y, CACHE_W, CACHE_H, CACHE_SCALE,
@@ -14,137 +14,109 @@ export interface MinimapHandle {
 
 interface Props {
   navHandle:      React.MutableRefObject<NavHandle | null>
-  stageRef:       React.RefObject<Konva.Stage>
   viewport:       { zoom: number; pan: { x: number; y: number } }
   strokes:        Stroke[]
   minimapHandle?: React.MutableRefObject<MinimapHandle | null>
 }
 
-export function Minimap({ navHandle, stageRef, viewport, strokes, minimapHandle }: Props) {
+// Bottom-right minimap. Same dead-zone/lerp follow + click-to-pan as before, but it rasterizes
+// strokes itself via the immediate-mode engine (drawCommitted) onto a low-res offscreen canvas
+// — replacing Konva's layer.toCanvas() — and reads viewport/size from the camera NavHandle.
+export function Minimap({ navHandle, viewport, strokes, minimapHandle }: Props) {
   const bgRef       = useRef<HTMLCanvasElement>(null)
   const blueRef     = useRef<HTMLDivElement>(null)
   const cacheRef    = useRef<HTMLCanvasElement | null>(null)
   const wrapRef     = useRef<HTMLDivElement>(null)
   const dragging    = useRef(false)
-  // Minimap center in canvas coords — follows viewport with a dead zone
-  const mmCenterRef   = useRef({ x: CANVAS_W / 2, y: CANVAS_H / 2 })
-  const rafRef        = useRef(0)
-  const cacheErrorRef = useRef(false)
+  const mmCenterRef = useRef({ x: CANVAS_W / 2, y: CANVAS_H / 2 })
+  const rafRef      = useRef(0)
 
-  // Render strokes to a low-res off-screen canvas (expensive — only on stroke change)
+  const size = () => navHandle.current?.getSize() ?? { w: 0, h: 0 }
+
+  // Render all strokes to a low-res off-screen canvas (only on stroke change). Single canvas,
+  // timestamp order — the eraser's destination-out cuts what came before it, good enough for a
+  // thumbnail. Boil frame 0, wiggle off (a still preview).
   const buildCache = useCallback(() => {
-    const stage = stageRef.current
-    const layer = navHandle.current?.getLayer()
-    if (!stage || !layer) return
-
-    const savedX = stage.x(), savedY = stage.y(), savedS = stage.scaleX()
-    stage.x(0); stage.y(0); stage.scaleX(1); stage.scaleY(1)
-    try {
-      cacheRef.current = layer.toCanvas({
-        x: CACHE_X, y: CACHE_Y,
-        width:  CACHE_W,
-        height: CACHE_H,
-        pixelRatio: CACHE_SCALE,
-      }) as HTMLCanvasElement
-      cacheErrorRef.current = false
-    } catch { cacheRef.current = null; cacheErrorRef.current = true }
-    stage.x(savedX); stage.y(savedY); stage.scaleX(savedS); stage.scaleY(savedS)
-  }, [navHandle, stageRef])
-
-  // Fast composite: gray border → white zone → clipped stroke blit.
-  // Takes live mmLeft/mmTop/worldW/worldH so it works both from the strokes
-  // rebuild path and the viewport-change path.
-  const renderBg = useCallback((
-    mmLeft: number, mmTop: number, worldW: number, worldH: number,
-  ) => {
-    const ctx = bgRef.current?.getContext('2d')
-    if (!ctx) return
-
-    ctx.clearRect(0, 0, MM_W, MM_H)
-
-    // Gray border fills the whole minimap
-    ctx.fillStyle = '#ddd0bd'   // --m-line-2
-    ctx.fillRect(0, 0, MM_W, MM_H)
-
-    // White comfortable zone
-    ctx.fillStyle = '#faf5ee'   // --m-bg
-    ctx.fillRect(GRAY_PX, GRAY_PX, WHITE_W, WHITE_H)
-
-    // Blit strokes from cache, clipped to white zone so gray stays clean
-    const cache = cacheRef.current
-    if (cache) {
-      ctx.save()
-      ctx.beginPath()
-      ctx.rect(GRAY_PX, GRAY_PX, WHITE_W, WHITE_H)
-      ctx.clip()
-
-      const iL = Math.max(mmLeft, CACHE_X)
-      const iT = Math.max(mmTop,  CACHE_Y)
-      const iR = Math.min(mmLeft + worldW, CACHE_X + CACHE_W)
-      const iB = Math.min(mmTop  + worldH, CACHE_Y + CACHE_H)
-
-      if (iR > iL && iB > iT) {
-        const dx   = (iL - mmLeft) / worldW * MM_W
-        const dy   = (iT - mmTop)  / worldH * MM_H
-        const dw   = (iR - iL)     / worldW * MM_W
-        const dh   = (iB - iT)     / worldH * MM_H
-        const srcX = (iL - CACHE_X) * CACHE_SCALE
-        const srcY = (iT - CACHE_Y) * CACHE_SCALE
-        const srcW = (iR - iL)      * CACHE_SCALE
-        const srcH = (iB - iT)      * CACHE_SCALE
-        ctx.drawImage(cache, srcX, srcY, srcW, srcH, dx, dy, dw, dh)
-      }
-
-      ctx.restore()
+    const cv = document.createElement('canvas')
+    cv.width = Math.max(1, Math.round(CACHE_W * CACHE_SCALE))
+    cv.height = Math.max(1, Math.round(CACHE_H * CACHE_SCALE))
+    const ctx = cv.getContext('2d')
+    if (!ctx) {
+      cacheRef.current = null
+      return
     }
-  }, [])
+    ctx.setTransform(CACHE_SCALE, 0, 0, CACHE_SCALE, -CACHE_X * CACHE_SCALE, -CACHE_Y * CACHE_SCALE)
+    for (const s of strokes) drawCommitted(ctx, s, 0, false, CACHE_SCALE)
+    cacheRef.current = cv
+  }, [strokes])
 
-  // Full update on each viewport change:
-  //   1. Compute viewport in canvas coords from live stage state
-  //   2. Run dead zone clamping to update mmCenter
-  //   3. Composite background
-  //   4. Imperatively position the blue indicator div
+  const renderBg = useCallback(
+    (mmLeft: number, mmTop: number, worldW: number, worldH: number) => {
+      const ctx = bgRef.current?.getContext('2d')
+      if (!ctx) return
+      ctx.clearRect(0, 0, MM_W, MM_H)
+      ctx.fillStyle = '#ddd0bd'
+      ctx.fillRect(0, 0, MM_W, MM_H)
+      ctx.fillStyle = '#faf5ee'
+      ctx.fillRect(GRAY_PX, GRAY_PX, WHITE_W, WHITE_H)
+
+      const cache = cacheRef.current
+      if (cache) {
+        ctx.save()
+        ctx.beginPath()
+        ctx.rect(GRAY_PX, GRAY_PX, WHITE_W, WHITE_H)
+        ctx.clip()
+        const iL = Math.max(mmLeft, CACHE_X)
+        const iT = Math.max(mmTop, CACHE_Y)
+        const iR = Math.min(mmLeft + worldW, CACHE_X + CACHE_W)
+        const iB = Math.min(mmTop + worldH, CACHE_Y + CACHE_H)
+        if (iR > iL && iB > iT) {
+          const dx = ((iL - mmLeft) / worldW) * MM_W
+          const dy = ((iT - mmTop) / worldH) * MM_H
+          const dw = ((iR - iL) / worldW) * MM_W
+          const dh = ((iB - iT) / worldH) * MM_H
+          const srcX = (iL - CACHE_X) * CACHE_SCALE
+          const srcY = (iT - CACHE_Y) * CACHE_SCALE
+          const srcW = (iR - iL) * CACHE_SCALE
+          const srcH = (iB - iT) * CACHE_SCALE
+          ctx.drawImage(cache, srcX, srcY, srcW, srcH, dx, dy, dw, dh)
+        }
+        ctx.restore()
+      }
+    },
+    [],
+  )
+
   const update = useCallback(() => {
-    const stage = stageRef.current
-    if (!stage) return
-
-    const stW = stage.width()
-    const stH = stage.height()
+    const { w: stW, h: stH } = size()
     if (!stW || !stH) return
+    const z = viewport.zoom
+    const px = viewport.pan.x
+    const py = viewport.pan.y
 
-    const z  = stage.scaleX()
-    const px = stage.x()
-    const py = stage.y()
-
-    // Viewport center + size in canvas coords
     const vpCx = -px / z + stW / 2
     const vpCy = -py / z + stH / 2
-    const vpW  = stW / z
-    const vpH  = stH / z
+    const vpW = stW / z
+    const vpH = stH / z
 
-    // Dynamic world size (see getWorldW comment)
     const worldW = getWorldW(stW, stH)
     const worldH = getWorldH(worldW)
 
-    // Current minimap world bounds
     let mmLeft = mmCenterRef.current.x - worldW / 2
-    let mmTop  = mmCenterRef.current.y - worldH / 2
+    let mmTop = mmCenterRef.current.y - worldH / 2
 
-    // Blue edges in minimap pixels under current mmCenter
-    const blueL0 = (vpCx - vpW / 2 - mmLeft) / worldW * MM_W
-    const blueR0 = (vpCx + vpW / 2 - mmLeft) / worldW * MM_W
-    const blueT0 = (vpCy - vpH / 2 - mmTop)  / worldH * MM_H
-    const blueB0 = (vpCy + vpH / 2 - mmTop)  / worldH * MM_H
+    const blueL0 = ((vpCx - vpW / 2 - mmLeft) / worldW) * MM_W
+    const blueR0 = ((vpCx + vpW / 2 - mmLeft) / worldW) * MM_W
+    const blueT0 = ((vpCy - vpH / 2 - mmTop) / worldH) * MM_H
+    const blueB0 = ((vpCy + vpH / 2 - mmTop) / worldH) * MM_H
 
-    // Dead zone: compute target mmCenter so blue stays within the white zone
-    if (blueL0 < GRAY_PX)        mmLeft = vpCx - vpW / 2 - GRAY_PX * worldW / MM_W
-    if (blueR0 > MM_W - GRAY_PX) mmLeft = vpCx + vpW / 2 - (MM_W - GRAY_PX) * worldW / MM_W
-    if (blueT0 < GRAY_PX)        mmTop  = vpCy - vpH / 2 - GRAY_PX * worldH / MM_H
-    if (blueB0 > MM_H - GRAY_PX) mmTop  = vpCy + vpH / 2 - (MM_H - GRAY_PX) * worldH / MM_H
+    if (blueL0 < GRAY_PX) mmLeft = vpCx - vpW / 2 - (GRAY_PX * worldW) / MM_W
+    if (blueR0 > MM_W - GRAY_PX) mmLeft = vpCx + vpW / 2 - ((MM_W - GRAY_PX) * worldW) / MM_W
+    if (blueT0 < GRAY_PX) mmTop = vpCy - vpH / 2 - (GRAY_PX * worldH) / MM_H
+    if (blueB0 > MM_H - GRAY_PX) mmTop = vpCy + vpH / 2 - ((MM_H - GRAY_PX) * worldH) / MM_H
 
-    // Lerp toward target at 1/4 speed; keep scheduling rAF frames until converged
     const targetCx = mmLeft + worldW / 2
-    const targetCy = mmTop  + worldH / 2
+    const targetCy = mmTop + worldH / 2
     const dx = targetCx - mmCenterRef.current.x
     const dy = targetCy - mmCenterRef.current.y
     if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) {
@@ -152,32 +124,36 @@ export function Minimap({ navHandle, stageRef, viewport, strokes, minimapHandle 
       cancelAnimationFrame(rafRef.current)
       rafRef.current = 0
     } else {
-      mmCenterRef.current = { x: mmCenterRef.current.x + dx * 0.25, y: mmCenterRef.current.y + dy * 0.25 }
-      if (!rafRef.current) rafRef.current = requestAnimationFrame(() => { rafRef.current = 0; update() })
+      mmCenterRef.current = {
+        x: mmCenterRef.current.x + dx * 0.25,
+        y: mmCenterRef.current.y + dy * 0.25,
+      }
+      if (!rafRef.current)
+        rafRef.current = requestAnimationFrame(() => {
+          rafRef.current = 0
+          update()
+        })
     }
     mmLeft = mmCenterRef.current.x - worldW / 2
-    mmTop  = mmCenterRef.current.y - worldH / 2
+    mmTop = mmCenterRef.current.y - worldH / 2
 
-    // Composite background at new mmCenter
     renderBg(mmLeft, mmTop, worldW, worldH)
 
-    // Imperatively update blue indicator position (avoids a React re-render per frame)
-    const blueL = (vpCx - vpW / 2 - mmLeft) / worldW * MM_W
-    const blueT = (vpCy - vpH / 2 - mmTop)  / worldH * MM_H
-    const blueW = vpW / worldW * MM_W
-    const blueH = vpH / worldH * MM_H
-
+    const blueL = ((vpCx - vpW / 2 - mmLeft) / worldW) * MM_W
+    const blueT = ((vpCy - vpH / 2 - mmTop) / worldH) * MM_H
+    const blueW = (vpW / worldW) * MM_W
+    const blueH = (vpH / worldH) * MM_H
     const el = blueRef.current
     if (el) {
-      el.style.left    = blueL + 'px'
-      el.style.top     = blueT + 'px'
-      el.style.width   = blueW + 'px'
-      el.style.height  = blueH + 'px'
+      el.style.left = blueL + 'px'
+      el.style.top = blueT + 'px'
+      el.style.width = blueW + 'px'
+      el.style.height = blueH + 'px'
       el.style.display = blueW > 0 && blueH > 0 ? 'block' : 'none'
     }
-  }, [stageRef, renderBg])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewport, renderBg])
 
-  // Expose resetCenter so ZoomControls can reset the minimap pan on Reset
   useEffect(() => {
     if (!minimapHandle) return
     minimapHandle.current = {
@@ -188,43 +164,42 @@ export function Minimap({ navHandle, stageRef, viewport, strokes, minimapHandle 
         update()
       },
     }
-    return () => { minimapHandle.current = null }
+    return () => {
+      minimapHandle.current = null
+    }
   }, [minimapHandle, update])
 
-  // Cancel any running lerp loop on unmount
   useEffect(() => () => cancelAnimationFrame(rafRef.current), [])
 
-  // Strokes changed: rebuild cache then full update (always retry even after prior failure)
-  useEffect(() => { buildCache(); update() }, [strokes, buildCache, update])
+  useEffect(() => {
+    buildCache()
+    update()
+  }, [strokes, buildCache, update])
 
-  // Viewport changed: update; rebuild cache only if not built and no prior failure
-  useEffect(() => { if (!cacheRef.current && !cacheErrorRef.current) buildCache(); update() }, [viewport, buildCache, update])
+  useEffect(() => {
+    if (!cacheRef.current) buildCache()
+    update()
+  }, [viewport, buildCache, update])
 
-  // Click / drag: translate minimap px → canvas coord → center viewport there
-  const goTo = useCallback((clientX: number, clientY: number) => {
-    const rect  = wrapRef.current?.getBoundingClientRect()
-    const stage = stageRef.current
-    const nav   = navHandle.current
-    if (!rect || !stage || !nav) return
-
-    const stW = stage.width()
-    const stH = stage.height()
-    const z   = stage.scaleX()
-
-    const worldW = getWorldW(stW, stH)
-    const worldH = getWorldH(worldW)
-    const mmLeft = mmCenterRef.current.x - worldW / 2
-    const mmTop  = mmCenterRef.current.y - worldH / 2
-
-    const mx = Math.max(0, Math.min(MM_W, clientX - rect.left))
-    const my = Math.max(0, Math.min(MM_H, clientY - rect.top))
-    const { cx, cy } = minimapToCanvas(mx, my, mmLeft, mmTop, worldW, worldH)
-
-    nav.applyViewport(z, {
-      x: stW / 2 - cx * z,
-      y: stH / 2 - cy * z,
-    })
-  }, [navHandle, stageRef])
+  const goTo = useCallback(
+    (clientX: number, clientY: number) => {
+      const rect = wrapRef.current?.getBoundingClientRect()
+      const nav = navHandle.current
+      const { w: stW, h: stH } = size()
+      if (!rect || !nav || !stW || !stH) return
+      const z = viewport.zoom
+      const worldW = getWorldW(stW, stH)
+      const worldH = getWorldH(worldW)
+      const mmLeft = mmCenterRef.current.x - worldW / 2
+      const mmTop = mmCenterRef.current.y - worldH / 2
+      const mx = Math.max(0, Math.min(MM_W, clientX - rect.left))
+      const my = Math.max(0, Math.min(MM_H, clientY - rect.top))
+      const { cx, cy } = minimapToCanvas(mx, my, mmLeft, mmTop, worldW, worldH)
+      nav.applyViewport(z, { x: stW / 2 - cx * z, y: stH / 2 - cy * z })
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [navHandle, viewport],
+  )
 
   return (
     <div
@@ -238,21 +213,21 @@ export function Minimap({ navHandle, stageRef, viewport, strokes, minimapHandle 
         cursor: 'crosshair',
         zIndex: 10,
       }}
-      onMouseDown={e => { dragging.current = true;  goTo(e.clientX, e.clientY) }}
-      onMouseMove={e => { if (dragging.current) goTo(e.clientX, e.clientY) }}
-      onMouseUp={()    => { dragging.current = false }}
+      onMouseDown={(e) => { dragging.current = true; goTo(e.clientX, e.clientY) }}
+      onMouseMove={(e) => { if (dragging.current) goTo(e.clientX, e.clientY) }}
+      onMouseUp={() => { dragging.current = false }}
       onMouseLeave={() => { dragging.current = false }}
     >
       <canvas ref={bgRef} width={MM_W} height={MM_H} style={{ display: 'block' }} />
       <div
         ref={blueRef}
         style={{
-          position:      'absolute',
-          display:       'none',
-          border:        '1.5px solid var(--m-primary)',
-          background:    'color-mix(in oklab, var(--m-primary) 10%, transparent)',
+          position: 'absolute',
+          display: 'none',
+          border: '1.5px solid var(--m-primary)',
+          background: 'color-mix(in oklab, var(--m-primary) 10%, transparent)',
           pointerEvents: 'none',
-          boxSizing:     'border-box',
+          boxSizing: 'border-box',
         }}
       />
     </div>

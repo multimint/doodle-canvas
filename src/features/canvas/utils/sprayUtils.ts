@@ -1,4 +1,3 @@
-import type Konva from 'konva'
 import { jrand, FRAMES } from './wiggleUtils'
 
 // Builds the spray-can stamp pattern for a stroke. Mirrors the reference drawSpraySegment:
@@ -86,10 +85,6 @@ export function sprayFor(points: number[], strokeWidth: number): number[] {
   const spray = generateSprayPoints(points, strokeWidth)
   sprayCache.set(points, { sw: strokeWidth, spray })
   return spray
-}
-
-function raw(ctx: Konva.Context): CanvasRenderingContext2D {
-  return (ctx as unknown as { _context: CanvasRenderingContext2D })._context
 }
 
 // Append every droplet of boil frame `frame` to the current path, rounded to the world grid
@@ -187,53 +182,40 @@ function framesFor(
   return built
 }
 
-export function brushSceneFunc(ctx: Konva.Context, shape: Konva.Shape) {
-  // animT carries the shared boil frame index (0..FRAMES-1), set by useWiggle.
-  const frame = (shape.getAttr('animT')      as number)   ?? 0
-  const sp    = (shape.getAttr('sprayPoints') as number[]) ?? []
-  const ds    = (shape.getAttr('dotSize')     as number)   ?? 2
-  const jmag  = (shape.getAttr('jmag')        as number)   ?? 1.5
-  const live  = (shape.getAttr('live')        as boolean)  ?? false
-  if (sp.length < 2) return
-  const c2d = raw(ctx)
-  const fi = ((frame % FRAMES) + FRAMES) % FRAMES
+export interface SprayDrawOpts {
+  sprayPoints: number[]
+  color: string
+  dotSize: number
+  jmag: number
+  frame: number
+  // The live stroke's geometry changes every move, so baking 3 frames each time would cost
+  // more than it saves — live strokes draw droplets straight.
+  live: boolean
+  // Device px per world unit (devicePixelRatio × camera zoom) the cache frames bake at, so a
+  // blitted frame stays crisp. A >20% change rebuilds the frames (see framesFor).
+  pr: number
+}
 
-  // The live stroke's geometry changes every move, so baking 3 frames each time would cost more
-  // than it saves — draw it straight. Committed strokes blit their cached frame.
-  if (!live) {
-    const color = shape.fill() as string
-    const pr = (typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1) *
-      (shape.getAbsoluteScale().x || 1)
-    const fc = framesFor(sp, color, ds, jmag, pr)
+// Draw a spray stroke for boil frame `frame` onto a 2D context that already carries the world
+// transform (camera pan/zoom). Committed strokes blit their cached bitmap frame; live and
+// oversized strokes path the droplets directly. The immediate-mode replacement for the old
+// Konva brush sceneFunc — same cache, no Konva indirection.
+export function drawSpray(c2d: CanvasRenderingContext2D, o: SprayDrawOpts) {
+  const sp = o.sprayPoints
+  if (sp.length < 2) return
+  const fi = ((o.frame % FRAMES) + FRAMES) % FRAMES
+
+  if (!o.live) {
+    const fc = framesFor(sp, o.color, o.dotSize, o.jmag, o.pr)
     if (fc) {
-      // c2d already carries the layer's world transform, so place the frame at its world box.
       c2d.drawImage(fc.frames[fi], fc.x, fc.y, fc.w, fc.h)
       return
     }
     // fc null → stroke too big to cache: fall through to direct draw.
   }
 
-  c2d.fillStyle = shape.fill() as string
+  c2d.fillStyle = o.color
   c2d.beginPath()
-  pathDroplets(c2d, sp, fi, ds, jmag)
+  pathDroplets(c2d, sp, fi, o.dotSize, o.jmag)
   c2d.fill()
-}
-
-// Explicit hit region for committed spray strokes (the scene func blits a bitmap, which can't
-// carry the hit colorKey). A fat polyline down the original path is clickable along the whole
-// stroke — enough to double-click-delete. Live strokes pass listening:false, so this never runs
-// for them. The boil only redraws the SCENE canvas, so this fires solely on structural changes.
-export function brushHitFunc(ctx: Konva.Context, shape: Konva.Shape) {
-  const pts = (shape.getAttr('hitPoints') as number[]) ?? []
-  if (pts.length < 2) return
-  const c2d = raw(ctx)
-  // colorKey is Konva's unique per-shape hit colour; painting in it maps hits back to this node.
-  c2d.strokeStyle = (shape as unknown as { colorKey: string }).colorKey
-  c2d.lineWidth = (shape.getAttr('hitWidth') as number) ?? 12
-  c2d.lineCap = 'round'
-  c2d.lineJoin = 'round'
-  c2d.beginPath()
-  c2d.moveTo(pts[0], pts[1])
-  for (let i = 2; i < pts.length; i += 2) c2d.lineTo(pts[i], pts[i + 1])
-  c2d.stroke()
 }

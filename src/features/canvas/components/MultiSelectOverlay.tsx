@@ -1,5 +1,4 @@
-import { Group, Rect } from 'react-konva'
-import type Konva from 'konva'
+import { useRef } from 'react'
 import type { Stroke, StrokeData } from '../../../lib/types'
 import {
   handleAnchor,
@@ -8,57 +7,63 @@ import {
   RESIZE_HANDLES,
   type AABB,
   type Box,
+  type HandleRole,
   type RotBox,
 } from '../utils/textBoxGeometry'
 import type { XformBox } from './textBoxTypes'
+import type { Camera } from '../engine/camera'
 
-interface MultiSelectOverlayProps {
+// Group selection (2+ boxes), as DOM overlays. Group MOVE is handled by the stage's pointer
+// FSM (dragging inside the union); this overlay draws each box's dashed outline + 8 resize
+// handles (NO rotate). Resizing a handle affects only that box via `xform`; on release it
+// persists and recomputes the union rect. Reuses the same world-space resize math as the old
+// Konva version (textBoxGeometry), driven by the stage's toWorld() converter.
+
+const HS = 11
+const ACCENT = '#3d5afe'
+
+interface Props {
   multiIds: string[]
   multiRect: Box
   multiOffset: { dx: number; dy: number } | null
   xform: XformBox | null
   strokes: Stroke[]
-  zoom: number
-  stageRef: React.RefObject<Konva.Stage>
+  cam: Camera
+  toWorld: (clientX: number, clientY: number) => { x: number; y: number }
   handleStartRef: React.MutableRefObject<RotBox | null>
-  multiDragStart: React.MutableRefObject<{ x: number; y: number } | null>
-  setMultiOffset: (o: { dx: number; dy: number } | null) => void
-  setMultiRect: (b: Box | null) => void
   setXform: (x: XformBox | null) => void
-  clearSelection: () => void
+  setMultiRect: (b: Box | null) => void
   onUpdateStroke?: (id: string, patch: Partial<StrokeData>) => void
 }
 
-// Group selection (2+ boxes): drag the transparent union Rect to move all, Delete to
-// remove all. Each box also shows its own dashed outline plus 8 resize ("expand")
-// handles — but NO rotate. Resizing a handle affects only that one box (via xform);
-// only move/delete act on the whole group.
 export function MultiSelectOverlay({
   multiIds,
-  multiRect,
   multiOffset,
   xform,
   strokes,
-  zoom,
-  stageRef,
+  cam,
+  toWorld,
   handleStartRef,
-  multiDragStart,
-  setMultiOffset,
-  setMultiRect,
   setXform,
-  clearSelection,
+  setMultiRect,
   onUpdateStroke,
-}: MultiSelectOverlayProps) {
+}: Props) {
   const off = multiOffset ?? { dx: 0, dy: 0 }
-  const hs = 11 / zoom
-  // Recompute the union bounds from current geometry (xform overrides the box being
-  // resized) so the group-move area tracks a resize.
-  const recomputeUnion = () => {
+  // Latest geometry during a resize, so commit + union recompute use the FINAL value rather
+  // than the xform captured when the pointerup listener was attached (a stale closure).
+  const latest = useRef<RotBox | null>(null)
+
+  const recomputeUnion = (overrideId?: string, override?: RotBox | null) => {
     const u = multiIds.reduce<AABB>(
       (acc, mid) => {
         const ms = strokes.find((k) => k.id === mid)
         if (!ms) return acc
-        const g = xform?.id === mid ? xform : ms.data
+        const g =
+          overrideId === mid && override
+            ? override
+            : xform?.id === mid
+              ? xform
+              : ms.data
         const a = textAABB(g)
         return {
           minX: Math.min(acc.minX, a.minX),
@@ -69,164 +74,111 @@ export function MultiSelectOverlay({
       },
       { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity },
     )
-    setMultiRect({
-      x: u.minX,
-      y: u.minY,
-      width: u.maxX - u.minX,
-      height: u.maxY - u.minY,
-    })
+    setMultiRect({ x: u.minX, y: u.minY, width: u.maxX - u.minX, height: u.maxY - u.minY })
   }
+
+  const startDrag = (
+    e: React.PointerEvent,
+    id: string,
+    role: HandleRole,
+    startRect: RotBox,
+  ) => {
+    e.preventDefault()
+    e.stopPropagation()
+    handleStartRef.current = startRect
+    latest.current = startRect
+    const el = e.currentTarget as HTMLElement
+    el.setPointerCapture(e.pointerId)
+    const move = (ev: PointerEvent) => {
+      const st = handleStartRef.current
+      if (!st) return
+      const nb = resizeFromPointer(role, st, toWorld(ev.clientX, ev.clientY))
+      latest.current = nb
+      setXform({ id, ...nb })
+    }
+    const up = (ev: PointerEvent) => {
+      el.releasePointerCapture(ev.pointerId)
+      el.removeEventListener('pointermove', move)
+      el.removeEventListener('pointerup', up)
+      const fb = latest.current
+      if (fb)
+        onUpdateStroke?.(id, {
+          x: fb.x,
+          y: fb.y,
+          width: fb.width,
+          height: fb.height,
+          rotation: fb.rotation,
+        })
+      recomputeUnion(id, fb)
+    }
+    el.addEventListener('pointermove', move)
+    el.addEventListener('pointerup', up)
+  }
+
   return (
     <>
-      {/* Group-move area: transparent, above box bodies but below handles. */}
-      <Rect
-        x={multiRect.x + off.dx}
-        y={multiRect.y + off.dy}
-        width={multiRect.width}
-        height={multiRect.height}
-        fill='transparent'
-        draggable
-        onClick={() => {
-          // The transparent move-rect covers the whole union, so a click in the empty
-          // gap between selected boxes lands here, not on the Stage — deselect all
-          // unless the click is actually on a box. (onClick only fires for a pure
-          // click, never after a drag.)
-          const wp = stageRef.current?.getRelativePointerPosition()
-          if (!wp) return
-          const overBox = multiIds.some((id) => {
-            const s = strokes.find((k) => k.id === id)
-            if (!s) return false
-            const a = textAABB(s.data)
-            return (
-              wp.x >= a.minX && wp.x <= a.maxX && wp.y >= a.minY && wp.y <= a.maxY
-            )
-          })
-          if (!overBox) clearSelection()
-        }}
-        onMouseEnter={(e) => {
-          const c = e.target.getStage()?.container()
-          if (c) c.style.cursor = 'move'
-        }}
-        onMouseLeave={(e) => {
-          const c = e.target.getStage()?.container()
-          if (c) c.style.cursor = 'default'
-        }}
-        onDragStart={() => {
-          multiDragStart.current = { x: multiRect.x, y: multiRect.y }
-        }}
-        onDragMove={(e) => {
-          const st = multiDragStart.current
-          if (!st) return
-          setMultiOffset({ dx: e.target.x() - st.x, dy: e.target.y() - st.y })
-        }}
-        onDragEnd={(e) => {
-          const st = multiDragStart.current
-          multiDragStart.current = null
-          if (!st) return
-          const dx = e.target.x() - st.x,
-            dy = e.target.y() - st.y
-          multiIds.forEach((id) => {
-            const s = strokes.find((k) => k.id === id)
-            if (s)
-              onUpdateStroke?.(id, {
-                x: (s.data.x ?? 0) + dx,
-                y: (s.data.y ?? 0) + dy,
-              })
-          })
-          setMultiRect({
-            x: st.x + dx,
-            y: st.y + dy,
-            width: multiRect.width,
-            height: multiRect.height,
-          })
-          setMultiOffset(null)
-        }}
-      />
-      {/* Per-box outline + resize handles (rendered above the move area). */}
       {multiIds.map((id) => {
         const s = strokes.find((k) => k.id === id)
         if (!s) return null
         const g = xform?.id === id ? xform : s.data
-        const W = g.width ?? 0,
-          H = g.height ?? 0
+        const W = (g.width ?? 0) * cam.zoom
+        const H = (g.height ?? 0) * cam.zoom
         const rot = (xform?.id === id ? xform.rotation : s.data.rotation) ?? 0
-        const bx = (g.x ?? 0) + off.dx,
-          by = (g.y ?? 0) + off.dy
-        const startRect = { x: g.x ?? 0, y: g.y ?? 0, width: W, height: H, rotation: rot }
+        const left = ((g.x ?? 0) + off.dx) * cam.zoom + cam.panX
+        const top = ((g.y ?? 0) + off.dy) * cam.zoom + cam.panY
+        const startRect: RotBox = {
+          x: g.x ?? 0,
+          y: g.y ?? 0,
+          width: g.width ?? 0,
+          height: g.height ?? 0,
+          rotation: rot,
+        }
         return (
-          <Group
+          <div
             key={`msel-${id}`}
-            x={bx + W / 2}
-            y={by + H / 2}
-            offsetX={W / 2}
-            offsetY={H / 2}
-            rotation={rot}
+            style={{
+              position: 'absolute',
+              left,
+              top,
+              width: W,
+              height: H,
+              transform: `rotate(${rot}deg)`,
+              transformOrigin: 'center center',
+              pointerEvents: 'none',
+              zIndex: 5,
+            }}
           >
-            <Rect
-              x={0}
-              y={0}
-              width={W}
-              height={H}
-              stroke='#3d5afe'
-              strokeWidth={1.5 / zoom}
-              dash={[6 / zoom, 4 / zoom]}
-              listening={false}
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                border: `1.5px dashed ${ACCENT}`,
+                boxSizing: 'border-box',
+              }}
             />
-            {RESIZE_HANDLES.map(({ role, cursor: hCursor }) => {
-              const a = handleAnchor(role, { x: 0, y: 0, width: W, height: H })
+            {RESIZE_HANDLES.map(({ role, cursor }) => {
+              const a = handleAnchor(role as HandleRole, { x: 0, y: 0, width: W, height: H })
               return (
-                <Rect
+                <div
                   key={role}
-                  x={a.x - hs / 2}
-                  y={a.y - hs / 2}
-                  width={hs}
-                  height={hs}
-                  fill='#ffffff'
-                  stroke='#3d5afe'
-                  strokeWidth={1.5 / zoom}
-                  hitStrokeWidth={22 / zoom}
-                  draggable
-                  onMouseEnter={(e) => {
-                    const c = e.target.getStage()?.container()
-                    if (c) c.style.cursor = hCursor
+                  style={{
+                    position: 'absolute',
+                    left: a.x - HS / 2,
+                    top: a.y - HS / 2,
+                    width: HS,
+                    height: HS,
+                    background: '#fff',
+                    border: `1.5px solid ${ACCENT}`,
+                    boxSizing: 'border-box',
+                    cursor,
+                    pointerEvents: 'auto',
+                    touchAction: 'none',
                   }}
-                  onMouseLeave={(e) => {
-                    const c = e.target.getStage()?.container()
-                    if (c) c.style.cursor = 'default'
-                  }}
-                  onDragStart={() => {
-                    handleStartRef.current = startRect
-                  }}
-                  onDragMove={(e) => {
-                    const st = handleStartRef.current
-                    const wp = stageRef.current?.getRelativePointerPosition()
-                    if (!st || !wp) return
-                    const nb = resizeFromPointer(role, st, wp)
-                    setXform({ id, ...nb })
-                    const la = handleAnchor(role, {
-                      x: 0,
-                      y: 0,
-                      width: nb.width,
-                      height: nb.height,
-                    })
-                    e.target.position({ x: la.x - hs / 2, y: la.y - hs / 2 })
-                  }}
-                  onDragEnd={() => {
-                    if (xform && xform.id === id) {
-                      onUpdateStroke?.(id, {
-                        x: xform.x,
-                        y: xform.y,
-                        width: xform.width,
-                        height: xform.height,
-                        rotation: xform.rotation,
-                      })
-                    }
-                    recomputeUnion()
-                  }}
+                  onPointerDown={(e) => startDrag(e, id, role, startRect)}
                 />
               )
             })}
-          </Group>
+          </div>
         )
       })}
     </>
