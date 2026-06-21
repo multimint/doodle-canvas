@@ -55,8 +55,6 @@ import { WiggleFilters } from './WiggleFilters'
 import type { ActiveBox, XformBox, ActiveSticker } from './textBoxTypes'
 import type { LiveStroke } from '../hooks/useLiveStrokes'
 
-export type { NavHandle } from '../hooks/useCamera'
-
 interface Props {
   strokes: Stroke[]
   tool: ToolType

@@ -10,8 +10,8 @@ import { FRAMES } from '../utils/wiggleUtils'
 // carets all agree — without a rendering backend. A `measure` function is injected so the math
 // is unit-testable with a synthetic metric; production uses a shared offscreen 2D context.
 
-export type Align = 'left' | 'center' | 'right'
-export type VAlign = 'top' | 'middle' | 'bottom'
+type Align = 'left' | 'center' | 'right'
+type VAlign = 'top' | 'middle' | 'bottom'
 
 export interface TextLayoutOpts {
   fontSize: number
@@ -23,7 +23,7 @@ export interface TextLayoutOpts {
   verticalAlign: VAlign
 }
 
-export interface TextLine {
+interface TextLine {
   text: string
   width: number
 }
@@ -38,7 +38,7 @@ export type Measure = (s: string) => number
 
 // The Text Box defaults the old Konva <Text> was configured with (padding 0, lineHeight 1,
 // centered both ways). Callers override fontSize/width/height per box.
-export const TEXT_DEFAULTS: Omit<TextLayoutOpts, 'fontSize' | 'width' | 'height'> = {
+const TEXT_DEFAULTS: Omit<TextLayoutOpts, 'fontSize' | 'width' | 'height'> = {
   fontFamily: DOODLE_FONT,
   lineHeight: 1,
   align: 'center',
@@ -46,7 +46,7 @@ export const TEXT_DEFAULTS: Omit<TextLayoutOpts, 'fontSize' | 'width' | 'height'
 }
 
 // The CSS/Canvas `font` shorthand for a box (matches what Konva built internally).
-export function textFont(fontSize: number, fontFamily = DOODLE_FONT): string {
+function textFont(fontSize: number, fontFamily = DOODLE_FONT): string {
   return `${fontSize}px ${fontFamily}`
 }
 

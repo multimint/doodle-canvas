@@ -72,19 +72,3 @@ export function drawCommitted(
     { frame, salt: hashStr(stroke.id), wiggle },
   )
 }
-
-// Draw a list of strokes in order, culling those outside the viewport. The eraser is never
-// culled away from a marker it overlaps, because both share the timestamp-ordered list the
-// caller passes — culling only drops strokes wholly off-screen.
-export function drawList(
-  ctx: CanvasRenderingContext2D,
-  strokes: Stroke[],
-  bounds: ViewportBounds,
-  frame: number,
-  wiggle: boolean,
-) {
-  for (const s of strokes) {
-    if (!isVisible(s, bounds)) continue
-    drawCommitted(ctx, s, frame, wiggle)
-  }
-}

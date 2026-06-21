@@ -1,12 +1,5 @@
 export type ToolType = 'pen' | 'marker' | 'eraser' | 'rect' | 'circle' | 'line' | 'text' | 'sticker' | 'hand' | 'select'
 
-export interface UserDoc {
-  email: string
-  displayName: string
-  photoURL: string
-  canvasCount: number
-}
-
 export const STROKE_CAP = 2000
 
 export interface CanvasDoc {
@@ -80,7 +73,7 @@ export interface PresenceEntry {
   joinedAt: number
 }
 
-export const USER_COLORS = [
+const USER_COLORS = [
   '#ef4444', '#f97316', '#eab308', '#22c55e',
   '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899',
 ]

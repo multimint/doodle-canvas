@@ -16,7 +16,7 @@ export const CACHE_X = -CANVAS_W / 2 // -960
 export const CACHE_Y = -CANVAS_H / 2 // -540
 export const CACHE_W = CANVAS_W * 2 //  3840
 export const CACHE_H = CANVAS_H * 2 //  2160
-export const CACHE_PX = 360
+const CACHE_PX = 360
 export const CACHE_SCALE = CACHE_PX / CACHE_W
 
 // World size: choose the larger axis constraint so blue fits within the white

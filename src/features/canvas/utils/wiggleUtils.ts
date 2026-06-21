@@ -22,7 +22,7 @@ export function frameIndex(t: number): number {
 // Deterministic signed noise in [-1, 1] from three integer seeds. Pure function of its
 // inputs, so a given (vertex, frame) always lands on the same offset — that stability is
 // what turns random noise into a repeatable 3-position boil instead of continuous static.
-export function jrand(a: number, b: number, c: number): number {
+function jrand(a: number, b: number, c: number): number {
   let h = Math.imul((a ^ 0x9e3779b9) >>> 0, 0x85ebca6b)
   h = (h ^ Math.imul((b + 0x165667b1) >>> 0, 0xc2b2ae35)) >>> 0
   h = (h ^ Math.imul((c + 0x27d4eb2f) >>> 0, 0x9e3779b9)) >>> 0
@@ -67,13 +67,6 @@ export function buildVariants(
     variants.push(jitterPoints(points, f, strokeWidth, salt))
   }
   return variants
-}
-
-// Small per-frame (dx, dy) wobble for a whole node (used to boil Text Boxes by nudging
-// the glyph node within its box). Amplitude floor matches a thin stroke.
-export function nodeJitter(salt: number, frame: number): [number, number] {
-  const mag = jitterMag(0)
-  return [jrand(salt, frame, 7) * mag, jrand(salt, frame, 9) * mag]
 }
 
 // Per-frame whole-sticker boil: a small translate + rotate that hops between the 3 boil

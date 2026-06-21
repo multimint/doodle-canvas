@@ -8,8 +8,6 @@ export const STICKER_IDS = [
   'frog', 'rainbow', 'boba', 'bear', 'mushroom', 'star',
 ] as const
 
-export type StickerId = typeof STICKER_IDS[number]
-
 export const STICKER_LABELS: Record<string, string> = {
   flower:   'Flower',
   sun:      'Sun',
