@@ -9,6 +9,7 @@ import {
 } from 'firebase/firestore'
 import { ref, set } from 'firebase/database'
 import { db, rtdb } from '../../lib/firebase'
+import { documentKind, DEFAULT_DOCUMENT_KIND } from '../canvas/documents/registry'
 
 // Creates a new canvas (Firestore doc + RTDB access entries + owner canvasCount bump),
 // holds the in-flight `creating`/`creatingId` state for the overlay, and navigates to
@@ -18,9 +19,10 @@ export function useCreateCanvas(uid: string) {
   const [creating, setCreating] = useState(false)
   const [creatingId, setCreatingId] = useState<string | null>(null)
 
-  const createCanvas = async () => {
+  const createCanvas = async (kindId: string = DEFAULT_DOCUMENT_KIND) => {
     setCreating(true)
     try {
+      const kind = documentKind(kindId)
       const canvasRef = doc(collection(db, 'canvases'))
       setCreatingId(canvasRef.id)
       const batch = writeBatch(db)
@@ -29,8 +31,9 @@ export function useCreateCanvas(uid: string) {
         ownerId: uid,
         members: [],
         pendingInvites: [],
-        width: 1920,
-        height: 1080,
+        kind: kind.id,
+        width: kind.width,
+        height: kind.height,
         createdAt: serverTimestamp(),
         updatedAt: Date.now(),
       })

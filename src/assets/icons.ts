@@ -1,0 +1,30 @@
+// UI icon artwork as data: SVG inner markup (path/rect/circle elements) keyed by icon name, in a
+// 24×24 viewBox. Kept here under assets/ so the vector data lives separate from the rendering
+// component (lib/icons.tsx). Add an icon by adding one entry; the <Icon> component renders it.
+export const ICON_PATHS: Record<string, string> = {
+  pen:      '<path d="M4 20l4.6-1.3L19 8.3 15.7 5 5.3 15.4 4 20z"/><path d="M14.5 6.2l3.3 3.3"/>',
+  marker:   '<path d="M14 4.5l5.5 5.5-9 9-5.5.9.9-5.5z"/><path d="M3 22h6"/>',
+  line:     '<path d="M5 19L19 5"/>',
+  square:   '<rect x="4.5" y="6" width="15" height="12" rx="3"/>',
+  circle:   '<circle cx="12" cy="12" r="7.6"/>',
+  text:     '<path d="M5 7V5.2h14V7M12 5.2v13.6M9.4 18.8h5.2"/>',
+  eraser:   '<path d="M8.5 18.5 3.8 13.8a1.8 1.8 0 0 1 0-2.5l7-7a1.8 1.8 0 0 1 2.5 0l4.4 4.4a1.8 1.8 0 0 1 0 2.5l-6.6 6.6H8.5z"/><path d="M5.5 19.5h13"/>',
+  search:   '<circle cx="11" cy="11" r="6.3"/><path d="M20 20l-4.2-4.2"/>',
+  plus:     '<path d="M12 5v14M5 12h14"/>',
+  share:    '<path d="M12 15.5V4.5M8.2 7.8 12 4l3.8 3.8"/><path d="M5.5 12.5V18a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-5.5"/>',
+  undo:     '<path d="M9 7.5 4 12.5l5 5"/><path d="M4 12.5h10.5a5 5 0 0 1 0 10H10"/>',
+  redo:     '<path d="M15 7.5l5 5-5 5"/><path d="M20 12.5H9.5a5 5 0 0 0 0 10H14"/>',
+  back:     '<path d="M15 5l-7 7 7 7"/>',
+  check:    '<path d="M5 12.5l4.5 4.5L19 7"/>',
+  dots:     '<circle cx="6" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="18" cy="12" r="1.7" fill="currentColor" stroke="none"/>',
+  grid:     '<rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/>',
+  users:    '<circle cx="9.2" cy="8.8" r="3.4"/><path d="M3.6 19.2a5.6 5.6 0 0 1 11.2 0"/><path d="M16 6.2a3.1 3.1 0 0 1 0 5.6M17 19.2a4.9 4.9 0 0 0-2.6-4.3"/>',
+  clock:    '<circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3 2"/>',
+  download: '<path d="M12 4v10M8 10.5l4 4 4-4"/><path d="M5 18.5h14"/>',
+  wiggle:   '<path d="M3 12 Q5.5 7 8 12 Q10.5 17 13 12 Q15.5 7 18 12 Q19.5 15 21 12"/>',
+  hand:     '<path d="M7.6 11.5V7a1.4 1.4 0 0 1 2.8 0v3.5"/><path d="M10.4 10.5V5.2a1.4 1.4 0 0 1 2.8 0v5.3"/><path d="M13.2 10.7V6.6a1.4 1.4 0 0 1 2.8 0v5.1"/><path d="M16 11.6V8.8a1.4 1.4 0 0 1 2.8 0v5.1a6 6 0 0 1-6 6h-1.2c-1.6 0-3-.65-4.1-1.8l-2.9-2.9a1.4 1.4 0 0 1 2-2l1.6 1.5"/>',
+  sticker:  '<path d="M14.5 4H6.5A2.5 2.5 0 0 0 4 6.5V17.5A2.5 2.5 0 0 0 6.5 20H17.5A2.5 2.5 0 0 0 20 17.5V9.5Z"/><path d="M14.5 4V7A2.5 2.5 0 0 0 17 9.5H20"/><circle cx="9.8" cy="12.4" r="0.7" fill="currentColor" stroke="none"/><circle cx="14.2" cy="12.4" r="0.7" fill="currentColor" stroke="none"/><path d="M9.8 15Q12 17 14.2 15"/>',
+  minus:    '<path d="M5 12h14"/>',
+  'zoom-in':  '<circle cx="11" cy="11" r="6.3"/><path d="M20 20l-4.2-4.2M8 11h6M11 8v6"/>',
+  'zoom-out': '<circle cx="11" cy="11" r="6.3"/><path d="M20 20l-4.2-4.2M8 11h6"/>',
+}

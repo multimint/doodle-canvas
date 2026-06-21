@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { Icon } from '../../../lib/icons';
 import type { ToolType } from '../../../lib/types';
 import { STROKE_SIZES } from '../utils/strokeSize';
+import { toolbarTools } from '../tools/registry';
 import {
   STICKER_IDS,
   STICKER_LABELS,
   drawSticker,
+  onStickerLoad,
 } from '../render/stickerLibrary';
 
 interface Props {
@@ -21,15 +23,9 @@ interface Props {
   horizontal?: boolean;
 }
 
-const DRAW_TOOLS: { id: ToolType; icon: string; label: string }[] = [
-  { id: 'pen', icon: 'pen', label: 'Pen' },
-  { id: 'marker', icon: 'marker', label: 'Marker' },
-  { id: 'line', icon: 'line', label: 'Line' },
-  { id: 'rect', icon: 'square', label: 'Rectangle' },
-  { id: 'circle', icon: 'circle', label: 'Circle' },
-  { id: 'text', icon: 'text', label: 'Text' },
-  { id: 'sticker', icon: 'sticker', label: 'Sticker' },
-];
+// The main draw-tools row, sourced from the tool registry (tools/tools.ts) so adding a tool to
+// the table surfaces it here automatically — no parallel list to keep in sync.
+const DRAW_TOOLS = toolbarTools();
 
 const PALETTE = [
   '#14151c',
@@ -55,6 +51,9 @@ function StickerThumb({
   onClick: () => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Repaint when the sticker SVG finishes decoding (it loads async).
+  const [ready, setReady] = useState(0);
+  useEffect(() => onStickerLoad(() => setReady((n) => n + 1)), []);
   useEffect(() => {
     const el = canvasRef.current;
     if (!el) return;
@@ -69,7 +68,7 @@ function StickerThumb({
     ctx.translate(18, 18);
     drawSticker(ctx, id, 14, '#333333');
     ctx.restore();
-  }, [id]);
+  }, [id, ready]);
 
   return (
     <button

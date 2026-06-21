@@ -26,6 +26,7 @@ import { InviteModal } from '../sharing/InviteModal'
 import { ConfirmModal } from '../../lib/ConfirmModal'
 import { pickUserColor, STROKE_CAP } from '../../lib/types'
 import type { CanvasDoc, Stroke, ToolType } from '../../lib/types'
+import { documentKind } from './documents/registry'
 
 export function CanvasPage() {
   const { canvasId } = useParams<{ canvasId: string }>()
@@ -210,6 +211,10 @@ export function CanvasPage() {
   if (!canvasDoc) return null
 
   const isOwner = canvasDoc.ownerId === uid
+  // The canvas's template: its background style comes from the document kind (see
+  // features/canvas/documents) rather than being hardcoded, so a new template can change it.
+  const docKind = documentKind(canvasDoc.kind)
+  const surfaceClass = docKind.background === 'dot-grid' ? 'm-canvas-surface' : ''
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', overflow: 'hidden', background: 'var(--m-bg)' }}>
@@ -301,7 +306,7 @@ export function CanvasPage() {
             position: 'relative',
             backgroundPosition: `${viewport.pan.x}px ${viewport.pan.y}px`,
           }}
-          className="m-canvas-surface"
+          className={surfaceClass}
         >
           <CanvasStage
             strokes={strokes}

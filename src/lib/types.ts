@@ -8,8 +8,9 @@ export interface CanvasDoc {
   ownerId: string
   members: string[]
   pendingInvites: string[]
-  width: 1920
-  height: 1080
+  kind?: string // document-kind id (see features/canvas/documents); absent on pre-seam docs
+  width: number
+  height: number
   createdAt: number
   updatedAt: number
   snapshotStrokeIds?: string[]

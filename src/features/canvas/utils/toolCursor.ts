@@ -1,41 +1,31 @@
 import type { ToolType } from '../../../lib/types'
+import { toolFor } from '../tools/registry'
+import type { ToolCursorVariant } from '../tools/registry'
 
-// The size/area-aware follower cursor (see ToolCursor.tsx). This module holds the pure
-// rules — which visual a tool gets and how big the sized variants render — so they can be
-// unit-tested without a DOM. cursorForTool still owns the native CSS cursor keyword.
+// The size/area-aware follower cursor (see ToolCursor.tsx). The per-tool rules — which visual a
+// tool gets and how much wider than the picked width it paints — now live on the tool descriptor
+// (tools/tools.ts); these are thin readers over the registry. cursorForTool still owns the native
+// CSS cursor keyword. The size math stays here as it's purely numeric.
+export type { ToolCursorVariant }
 
-// Smallest on-screen diameter (px) for the sized variants, so a thin stroke at low zoom
-// stays aimable instead of collapsing to a sub-pixel dot.
+// Smallest on-screen diameter (px) for the sized variants, so a thin stroke at low zoom stays
+// aimable instead of collapsing to a sub-pixel dot.
 export const MIN_CURSOR_SIZE = 8
 
-export type ToolCursorVariant =
-  | 'pen' // pen: precise solid dot in the tool color, sized to the thin stroke
-  | 'marker' // marker: translucent rounded-square felt nib at the broad marker width
-  | 'ring' // eraser: hollow ring, sized to the stroke (no color — it erases)
-  | 'crosshair' // line / rect / circle: precise point + small color dot (size is the drag)
-  | 'sticker' // sticker: a ghost of the selected sticker, previewing the stamp before placing
-  | 'none' // text / hand / select: no follower, keep the native cursor
-
 export function toolCursorVariant(tool: ToolType): ToolCursorVariant {
-  if (tool === 'pen') return 'pen'
-  if (tool === 'marker') return 'marker'
-  if (tool === 'eraser') return 'ring'
-  if (tool === 'line' || tool === 'rect' || tool === 'circle') return 'crosshair'
-  if (tool === 'sticker') return 'sticker'
-  return 'none'
+  return toolFor(tool).cursorVariant
 }
 
-// True when the tool draws its footprint with the follower (and so the stage should hide
-// the native cursor in its favour).
+// True when the tool draws its footprint with the follower (and so the stage should hide the
+// native cursor in its favour).
 export function usesToolCursor(tool: ToolType): boolean {
-  return toolCursorVariant(tool) !== 'none'
+  return toolFor(tool).cursorVariant !== 'none'
 }
 
 // How much wider than the picked stroke width the tool actually paints, so each cursor can
 // mirror its real footprint: the pen lays a 1× line and the marker a 3× felt nib.
 export function toolFootprintScale(tool: ToolType): number {
-  if (tool === 'marker') return 3
-  return 1
+  return toolFor(tool).footprintScale
 }
 
 // On-screen diameter for the sized variants: the painted width (strokeWidth in canvas units,

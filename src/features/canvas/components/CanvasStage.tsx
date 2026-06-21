@@ -40,6 +40,7 @@ import {
 } from '../engine/scene'
 import { drawSimpleStroke, drawStickerStroke } from '../engine/drawStroke'
 import { drawTextStroke } from '../engine/textLayout'
+import { toolFor, strokeKind, strokeKindForTool } from '../tools/registry'
 import { useCamera, type NavHandle } from '../hooks/useCamera'
 import { useBoil } from '../engine/useBoil'
 import { strokeAt } from '../engine/hitTest'
@@ -95,14 +96,6 @@ const DPR = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
 // latest/topmost stroke wins and same-color overlaps never darken), and the whole layer is
 // then shown at this alpha — one flat, uniform translucency regardless of how strokes nest.
 const MARKER_LAYER_OPACITY = 0.82
-const SIMPLE_TYPES: ToolType[] = [
-  'pen',
-  'marker',
-  'eraser',
-  'rect',
-  'circle',
-  'line',
-]
 
 function hexToRgba(hex: string, alpha: number): string {
   const r = parseInt(hex.slice(1, 3), 16)
@@ -287,15 +280,22 @@ export function CanvasStage({
       applyCamera(mctx, c, DPR)
       const bounds = viewportBounds(c, w, h)
 
+      // Layer routing comes from the stroke-kind registry: 'marker'/'mask' paint on the
+      // highlighter layer, 'main'/'mask' on the main layer (the eraser is 'mask' — it must cut
+      // both), 'last' (text/sticker) is drawn after the eraser below so it stays immune.
+      const liveKind = strokeKindForTool(tool)
+      const onMarker = (l: string) => l === 'marker' || l === 'mask'
+      const onMain = (l: string) => l === 'main' || l === 'mask'
+
       // Marker layer: markers + eraser masks, in timestamp order.
       for (const s of strokes) {
-        if ((s.type === 'marker' || s.type === 'eraser') && isVisible(s, bounds))
+        if (isVisible(s, bounds) && onMarker(strokeKind(s.type).layer))
           drawCommitted(kctx, s, frame, wiggle)
       }
       // Live marker / eraser mask on the marker layer.
-      if (livePoints.length >= 4 && (tool === 'marker' || tool === 'eraser')) {
-        const desc = descriptorFromLive({ type: tool, points: livePoints, color, strokeWidth })
-        drawSimpleStroke(kctx, tool as SimpleStrokeType, desc, {
+      if (livePoints.length >= 4 && liveKind && onMarker(liveKind.layer)) {
+        const desc = descriptorFromLive({ type: liveKind.type, points: livePoints, color, strokeWidth })
+        drawSimpleStroke(kctx, liveKind.type as SimpleStrokeType, desc, {
           frame,
           salt: 0,
           wiggle,
@@ -304,12 +304,7 @@ export function CanvasStage({
 
       // Main layer: simple shapes (pen/eraser/rect/circle/line) in order.
       for (const s of strokes) {
-        if (
-          s.type !== 'marker' &&
-          s.type !== 'text' &&
-          s.type !== 'sticker' &&
-          isVisible(s, bounds)
-        )
+        if (isVisible(s, bounds) && onMain(strokeKind(s.type).layer))
           drawCommitted(mctx, s, frame, wiggle)
       }
       // Remote live strokes (never text).
@@ -322,16 +317,15 @@ export function CanvasStage({
           wiggle,
         })
       }
-      // This client's live simple stroke (non-marker tools draw on the main layer).
-      if (livePoints.length >= 4 && SIMPLE_TYPES.includes(tool) && tool !== 'marker') {
-        const type = (tool === 'pen' ? 'path' : tool) as SimpleStrokeType
+      // This client's live simple stroke (main/mask kinds, excluding the marker layer).
+      if (livePoints.length >= 4 && liveKind && onMain(liveKind.layer)) {
         const desc = descriptorFromLive({
-          type: type === 'path' ? 'path' : (tool as Stroke['type']),
+          type: liveKind.type,
           points: livePoints,
           color,
           strokeWidth,
         })
-        drawSimpleStroke(mctx, type, desc, { frame, salt: 0, wiggle })
+        drawSimpleStroke(mctx, liveKind.type as SimpleStrokeType, desc, { frame, salt: 0, wiggle })
       }
       // Live text sizing rectangle (dashed) while dragging out a new box.
       if (livePoints.length >= 4 && tool === 'text') {
@@ -390,7 +384,7 @@ export function CanvasStage({
 
       // Text + stickers last (immune to the eraser, which already ran above).
       for (const s of strokes) {
-        if (s.type !== 'text' && s.type !== 'sticker') continue
+        if (strokeKind(s.type).layer !== 'last') continue
         if (!isVisible(s, bounds)) continue
         if (s.type === 'sticker') {
           // Freeze the boil while this sticker is selected/grouped so its handles stay aligned.
@@ -601,15 +595,16 @@ export function CanvasStage({
     (clientX: number, clientY: number, button: number) => {
       if (button !== 0) return
       const wp = toWorldClient(clientX, clientY)
+      const interaction = toolFor(tool).interaction
 
-      if (tool === 'hand') {
+      if (interaction === 'pan') {
         isPanning.current = true
         if (containerRef.current) containerRef.current.style.cursor = 'grabbing'
         lastClientPos.current = { x: clientX, y: clientY }
         return
       }
 
-      if (tool === 'select') {
+      if (interaction === 'select') {
         // Multi-select group: drag inside the union moves all (unless on a handle, which the
         // overlay captures first).
         if (multiIds.length > 1 && multiRect) {
@@ -677,7 +672,7 @@ export function CanvasStage({
 
       if (disabled) return
 
-      if (tool === 'text') {
+      if (interaction === 'text') {
         if (active?.editing) return
         isDrawing.current = true
         const pts = [wp.x, wp.y, wp.x, wp.y]
@@ -687,11 +682,16 @@ export function CanvasStage({
         return
       }
 
-      if (tool === 'sticker') {
-        const data = buildStrokeData('sticker', [wp.x, wp.y], color, strokeWidth, {
+      if (interaction === 'stamp') {
+        const data = buildStrokeData(tool, [wp.x, wp.y], color, strokeWidth, {
           stickerId: selectedSticker,
         })
-        onStrokeComplete({ type: 'sticker', authorId: '', data, timestamp: Date.now() })
+        onStrokeComplete({
+          type: toolFor(tool).produces!,
+          authorId: '',
+          data,
+          timestamp: Date.now(),
+        })
         onToolChange?.('select')
         return
       }
@@ -727,8 +727,9 @@ export function CanvasStage({
     (clientX: number, clientY: number) => {
       if (active?.editing) return
       const wp = toWorldClient(clientX, clientY)
+      const interaction = toolFor(tool).interaction
 
-      if (tool === 'hand') {
+      if (interaction === 'pan') {
         onMouseMove(wp.x, wp.y)
         if (!isPanning.current) return
         panBy(clientX - lastClientPos.current.x, clientY - lastClientPos.current.y)
@@ -780,7 +781,7 @@ export function CanvasStage({
       if (!isDrawing.current) return
 
       let newPoints: number[]
-      if (tool === 'pen' || tool === 'marker' || tool === 'eraser') {
+      if (interaction === 'freehand') {
         newPoints = [...livePointsRef.current, wp.x, wp.y]
       } else if (liveStartRef.current) {
         newPoints = [liveStartRef.current.x, liveStartRef.current.y, wp.x, wp.y]
@@ -788,8 +789,8 @@ export function CanvasStage({
       livePointsRef.current = newPoints
       setLivePoints(newPoints)
 
-      if (tool === 'text') return
-      const strokeType = (tool === 'pen' ? 'path' : tool) as Stroke['type']
+      if (interaction === 'text') return
+      const strokeType = toolFor(tool).produces!
       onLiveUpdate?.({ type: strokeType, points: newPoints, color, strokeWidth })
     },
     [
@@ -901,13 +902,15 @@ export function CanvasStage({
       return
     }
 
-    if (tool === 'hand') {
+    const interaction = toolFor(tool).interaction
+
+    if (interaction === 'pan') {
       cancelStroke()
       return
     }
 
     // Text: open the editor instead of committing.
-    if (tool === 'text') {
+    if (interaction === 'text') {
       const pts = livePointsRef.current
       const start = liveStartRef.current
       isDrawing.current = false
@@ -936,7 +939,11 @@ export function CanvasStage({
     }
 
     const points = livePointsRef.current
-    const isDrawingTool = SIMPLE_TYPES.includes(tool)
+    // Tools whose interaction commits a simple stroke on pointer-up (freehand / line / shapes).
+    const isDrawingTool =
+      interaction === 'freehand' ||
+      interaction === 'two-point' ||
+      interaction === 'drag-rect'
     if (!isDrawing.current || points.length < 4 || !isDrawingTool) {
       isDrawing.current = false
       livePointsRef.current = []
@@ -946,9 +953,8 @@ export function CanvasStage({
       return
     }
     isDrawing.current = false
-    const rtool = tool === 'pen' ? 'path' : tool
     const data = buildStrokeData(tool, points, color, strokeWidth)
-    onStrokeComplete({ type: rtool as Stroke['type'], authorId: '', data, timestamp: Date.now() })
+    onStrokeComplete({ type: toolFor(tool).produces!, authorId: '', data, timestamp: Date.now() })
     liveStartRef.current = null
     pendingCommitRef.current = true
     strokesAtCommitRef.current = strokesLenRef.current
@@ -970,7 +976,7 @@ export function CanvasStage({
 
   const handleDoubleClick = useCallback(
     (clientX: number, clientY: number) => {
-      if (tool !== 'select') return
+      if (toolFor(tool).interaction !== 'select') return
       const wp = toWorldClient(clientX, clientY)
       const textHit = strokeAt(strokes, wp.x, wp.y, (s) => s.type === 'text')
       if (textHit) {
@@ -993,7 +999,7 @@ export function CanvasStage({
   const handleContextMenu = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault()
-      if (tool !== 'select') {
+      if (toolFor(tool).interaction !== 'select') {
         cancelStroke()
         onToolChange?.('select')
       }
@@ -1004,7 +1010,8 @@ export function CanvasStage({
   // Wheel: zoom when idle/hand, else resize the stroke.
   const handleWheel = useCallback(
     (e: React.WheelEvent) => {
-      if (tool === 'hand' || tool === 'select') {
+      const it = toolFor(tool).interaction
+      if (it === 'pan' || it === 'select') {
         const rect = containerRef.current?.getBoundingClientRect()
         handleWheelZoom(e.deltaY, e.clientX - (rect?.left ?? 0), e.clientY - (rect?.top ?? 0))
         return

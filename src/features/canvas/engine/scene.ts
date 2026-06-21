@@ -2,12 +2,7 @@ import type { Stroke } from '../../../lib/types'
 import { type Camera, type ViewportBounds } from './camera'
 import { strokeBounds } from '../utils/strokeBounds'
 import { hashStr } from '../utils/wiggleUtils'
-import {
-  descriptorFromStroke,
-  type SimpleStrokeType,
-} from '../render/strokeDescriptor'
-import { drawSimpleStroke, drawStickerStroke } from './drawStroke'
-import { drawTextStroke } from './textLayout'
+import { strokeKind } from '../tools/registry'
 
 // The scene layer: turns the committed stroke list into draw calls on the layered canvases.
 // It owns the camera→device transform, the per-frame clear, viewport culling (the win over
@@ -50,25 +45,17 @@ export function isVisible(stroke: Stroke, bounds: ViewportBounds): boolean {
   )
 }
 
-// Paint one committed stroke onto a context that already carries the camera transform.
+// Paint one committed stroke onto a context that already carries the camera transform. Dispatch
+// on the stroke kind lives in the registry now (tools/strokeKinds.ts); the salt seeds the boil.
 export function drawCommitted(
   ctx: CanvasRenderingContext2D,
   stroke: Stroke,
   frame: number,
   wiggle: boolean,
 ) {
-  if (stroke.type === 'text') {
-    drawTextStroke(ctx, stroke.data ?? {}, frame, wiggle)
-    return
-  }
-  if (stroke.type === 'sticker') {
-    drawStickerStroke(ctx, stroke.data ?? {}, frame, wiggle, hashStr(stroke.id))
-    return
-  }
-  drawSimpleStroke(
-    ctx,
-    stroke.type as SimpleStrokeType,
-    descriptorFromStroke(stroke.data),
-    { frame, salt: hashStr(stroke.id), wiggle },
-  )
+  strokeKind(stroke.type).draw(ctx, stroke.data ?? {}, {
+    frame,
+    salt: hashStr(stroke.id),
+    wiggle,
+  })
 }

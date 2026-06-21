@@ -1,5 +1,5 @@
-import { useLayoutEffect, useRef } from 'react'
-import { drawSticker } from '../render/stickerLibrary'
+import { useLayoutEffect, useRef, useState, useEffect } from 'react'
+import { drawSticker, onStickerLoad } from '../render/stickerLibrary'
 import { MIN_STICKER_SIZE } from '../utils/strokeSerializer'
 
 interface Props {
@@ -17,6 +17,9 @@ const BOX = MIN_STICKER_SIZE // world units — matches buildStrokeData('sticker
 
 export function StickerPreview({ stickerId, color, zoom }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  // Repaint once the SVG decodes (it loads async, so the first frame can be blank).
+  const [ready, setReady] = useState(0)
+  useEffect(() => onStickerLoad(() => setReady((n) => n + 1)), [])
 
   useLayoutEffect(() => {
     const cv = canvasRef.current
@@ -34,7 +37,7 @@ export function StickerPreview({ stickerId, color, zoom }: Props) {
     const s = zoom * dpr
     ctx.setTransform(s, 0, 0, s, (BOX / 2) * s, (BOX / 2) * s)
     drawSticker(ctx, stickerId, BOX / 2, color)
-  }, [stickerId, color, zoom])
+  }, [stickerId, color, zoom, ready])
 
   return (
     <span className='tool-cursor-sticker'>
