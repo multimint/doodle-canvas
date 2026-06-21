@@ -91,3 +91,16 @@ export function fitCamera(w: number, h: number): Camera {
     panY: (h - CANVAS_HEIGHT * zoom) / 2,
   }
 }
+
+// Fit a small fixed world frame (fw×fh, e.g. a 120×90 Day Doodle) into the container, centred.
+// Unlike fitCamera this *upscales* (no 1:1 ceiling) so a tiny frame fills a much larger modal,
+// and it is re-applied on every resize so a locked view always shows the whole frame and nothing
+// outside it.
+export function fitFixedFrame(w: number, h: number, fw: number, fh: number): Camera {
+  const zoom = Math.min(w / fw, h / fh)
+  return {
+    zoom,
+    panX: (w - fw * zoom) / 2,
+    panY: (h - fh * zoom) / 2,
+  }
+}

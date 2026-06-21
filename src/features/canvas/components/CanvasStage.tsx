@@ -89,6 +89,25 @@ interface Props {
     marquee?: { x0: number; y0: number; x1: number; y1: number } | null
     selectedIds?: string[] | null
   }) => void
+  // Fixed-frame mode (Day Doodle modal): lock the view to a small world frame that fills the
+  // container, with no pan/zoom. worldWidth/worldHeight give the frame extent.
+  lockView?: boolean
+  worldWidth?: number
+  worldHeight?: number
+  // Open with an empty text box already in edit mode (Day Doodle's fresh-card flow), so the user
+  // can type immediately. Applied once on mount.
+  initialTextBox?: {
+    x: number
+    y: number
+    width: number
+    height: number
+    fontSize: number
+    color: string
+  } | null
+  // When set, a *new* text box that is blurred while still empty is kept open (re-focused) rather
+  // than discarded — so the Day Doodle's seeded text box doesn't vanish on an accidental click-off.
+  // Switching to a draw tool or pressing Escape still dismisses it.
+  keepEmptyTextBox?: boolean
 }
 
 const DPR = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
@@ -136,6 +155,11 @@ export function CanvasStage({
   displayNames,
   friendCursors,
   onSelectionChange,
+  lockView = false,
+  worldWidth,
+  worldHeight,
+  initialTextBox,
+  keepEmptyTextBox = false,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const markerCanvasRef = useRef<HTMLCanvasElement>(null)
@@ -155,6 +179,9 @@ export function CanvasStage({
   const [multiOffset, setMultiOffset] = useState<{ dx: number; dy: number } | null>(null)
   const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null)
   const handleStartRef = useRef<RotBox | null>(null)
+  // Bumped to remount the text editor when a kept-empty new box is re-opened (resets its
+  // commit-once guard and re-focuses it). See keepEmptyTextBox.
+  const [newBoxNonce, setNewBoxNonce] = useState(0)
 
   // ── Drawing state ───────────────────────────────────────────────────────────────────
   const isDrawing = useRef(false)
@@ -217,6 +244,10 @@ export function CanvasStage({
     getSceneCanvas,
     onViewportChange,
     onPinchStart: cancelStroke,
+    fixedFrame:
+      lockView && worldWidth && worldHeight
+        ? { width: worldWidth, height: worldHeight }
+        : undefined,
   })
 
   // Convert a client (page) point to world coords via the live camera + container rect.
@@ -450,21 +481,45 @@ export function CanvasStage({
     }
   }, [strokes])
 
-  // Leave idle mode → clear selection (but keep an open editor for box creation).
+  // Leave idle mode → clear selection (but keep an open editor for box creation). When a kept-empty
+  // box is active, switching to a draw tool is the escape hatch that dismisses it.
   useEffect(() => {
     if (tool === 'select') return
-    setActive((prev) => (prev && prev.editing ? prev : null))
+    setActive((prev) =>
+      prev && prev.editing && !(keepEmptyTextBox && prev.id === null) ? prev : null,
+    )
     setActiveSticker(null)
     setXform(null)
     setMultiIds([])
     setMultiRect(null)
     setMultiOffset(null)
     onSelectionChangeRef.current?.({ marquee: null, selectedIds: null })
-  }, [tool])
+  }, [tool, keepEmptyTextBox])
 
   useEffect(() => {
     setCursorVisible(false)
   }, [tool])
+
+  // Seed an empty, editing text box on mount (Day Doodle fresh-card flow). Mirrors the
+  // create-new-box path (active.id === null), so the editor opens ready for typing and commits a
+  // text stroke only if the user types something.
+  useEffect(() => {
+    if (!initialTextBox) return
+    setActive({
+      id: null,
+      editing: true,
+      x: initialTextBox.x,
+      y: initialTextBox.y,
+      width: initialTextBox.width,
+      height: initialTextBox.height,
+      rotation: 0,
+      fontSize: initialTextBox.fontSize,
+      color: initialTextBox.color,
+      strokeWidth,
+      initial: '',
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Broadcast our text-box focus so friends see the outline.
   useEffect(() => {
@@ -1010,6 +1065,11 @@ export function CanvasStage({
   // Wheel: zoom when idle/hand, else resize the stroke.
   const handleWheel = useCallback(
     (e: React.WheelEvent) => {
+      // Locked frame (Day Doodle): never zoom/pan — the wheel only resizes the active stroke.
+      if (lockView) {
+        onResizeStroke?.(e.deltaY < 0 ? 1 : -1)
+        return
+      }
       const it = toolFor(tool).interaction
       if (it === 'pan' || it === 'select') {
         const rect = containerRef.current?.getBoundingClientRect()
@@ -1018,7 +1078,7 @@ export function CanvasStage({
       }
       onResizeStroke?.(e.deltaY < 0 ? 1 : -1)
     },
-    [tool, handleWheelZoom, onResizeStroke],
+    [tool, handleWheelZoom, onResizeStroke, lockView],
   )
 
   // Text editor commit (create / update / clear-to-empty).
@@ -1038,10 +1098,19 @@ export function CanvasStage({
           data.width = active.width
           data.height = active.height
           data.rotation = active.rotation
+          // Honour the editor's own font size (so a seeded large box commits at that size, rather
+          // than snapping to the stroke-width-derived default).
+          data.fontSize = active.fontSize
           onStrokeComplete({ type: 'text', authorId: '', data, timestamp: Date.now() })
+          onToolChange?.('select')
+          setActive(null)
+        } else if (keepEmptyTextBox) {
+          // Empty + kept: don't discard — remount the editor so the box stays put and re-focuses.
+          setNewBoxNonce((n) => n + 1)
+        } else {
+          onToolChange?.('select')
+          setActive(null)
         }
-        onToolChange?.('select')
-        setActive(null)
       } else if (trimmed) {
         onUpdateStroke?.(active.id, { text: trimmed })
         setActive(null)
@@ -1050,7 +1119,7 @@ export function CanvasStage({
         setActive(null)
       }
     },
-    [active, onStrokeComplete, onUpdateStroke, onToolChange],
+    [active, onStrokeComplete, onUpdateStroke, onToolChange, keepEmptyTextBox],
   )
 
   const showToolCursor = isFinePointer && !disabled && usesToolCursor(tool)
@@ -1096,7 +1165,7 @@ export function CanvasStage({
           onTouchStart={
             i === 1
               ? (e) => {
-                  if (e.touches.length === 2) handleTouchStart(touchPoints(e))
+                  if (!lockView && e.touches.length === 2) handleTouchStart(touchPoints(e))
                   else pointerDown(e.touches[0].clientX, e.touches[0].clientY, 0)
                 }
               : undefined
@@ -1104,7 +1173,7 @@ export function CanvasStage({
           onTouchMove={
             i === 1
               ? (e) => {
-                  if (e.touches.length === 2) handleTouchMove(touchPoints(e))
+                  if (!lockView && e.touches.length === 2) handleTouchMove(touchPoints(e))
                   else pointerMove(e.touches[0].clientX, e.touches[0].clientY)
                 }
               : undefined
@@ -1280,7 +1349,7 @@ export function CanvasStage({
       {/* Text editor overlay. */}
       {active?.editing && (active.id !== null || !disabled) && (
         <TextBoxEditor
-          key={active.id ?? 'new'}
+          key={active.id ?? `new-${newBoxNonce}`}
           x={active.x * cam.zoom + cam.panX}
           y={active.y * cam.zoom + cam.panY}
           width={active.width * cam.zoom}

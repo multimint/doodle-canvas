@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Icon } from '../../../lib/icons';
 import type { ToolType } from '../../../lib/types';
+import type { ToolDescriptor } from '../tools/registry';
 import { STROKE_SIZES } from '../utils/strokeSize';
 import { toolbarTools } from '../tools/registry';
 import {
@@ -21,6 +22,13 @@ interface Props {
   onStickerChange: (id: string) => void;
   onClear: () => void;
   horizontal?: boolean;
+  // Override the draw-tools row (e.g. the Day Doodle modal drops the shape tools). Defaults to
+  // the full registry row.
+  drawTools?: ToolDescriptor[];
+  // Horizontal bars normally scroll on overflow-x, but `overflow-x: auto` forces overflow-y to
+  // `auto` too, which clips the colour/sticker popovers that pop *upward*. Inside the constrained
+  // Day Doodle modal we set this so the bar never scrolls and the popovers can escape.
+  noScroll?: boolean;
 }
 
 // The main draw-tools row, sourced from the tool registry (tools/tools.ts) so adding a tool to
@@ -109,6 +117,8 @@ export function Toolbar({
   onStickerChange,
   onClear,
   horizontal = false,
+  drawTools = DRAW_TOOLS,
+  noScroll = false,
 }: Props) {
   const [showPicker, setShowPicker] = useState(false);
   const [showStickers, setShowStickers] = useState(false);
@@ -294,7 +304,9 @@ export function Toolbar({
           flexShrink: 0,
           borderTop: '1px solid var(--m-line)',
           background: 'var(--m-surface)',
-          overflowX: 'auto',
+          // `overflow-x: auto` would force overflow-y to auto and clip the upward popovers, so the
+          // modal opts out of scrolling entirely (its trimmed toolset fits without it).
+          overflowX: noScroll ? 'visible' : 'auto',
           overflowY: 'visible',
           zIndex: 5,
         }}
@@ -317,7 +329,7 @@ export function Toolbar({
         />
 
         {/* Draw tools */}
-        {DRAW_TOOLS.map(({ id, icon, label }) => (
+        {drawTools.map(({ id, icon, label }) => (
           <div key={id} style={{ position: 'relative', flexShrink: 0 }}>
             <button
               title={label}
@@ -432,7 +444,7 @@ export function Toolbar({
         }}
       />
 
-      {DRAW_TOOLS.map(({ id, icon, label }) => (
+      {drawTools.map(({ id, icon, label }) => (
         <div key={id} style={{ position: 'relative' }}>
           <button
             title={label}

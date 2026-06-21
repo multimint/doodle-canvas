@@ -27,4 +27,7 @@ export const ICON_PATHS: Record<string, string> = {
   minus:    '<path d="M5 12h14"/>',
   'zoom-in':  '<circle cx="11" cy="11" r="6.3"/><path d="M20 20l-4.2-4.2M8 11h6M11 8v6"/>',
   'zoom-out': '<circle cx="11" cy="11" r="6.3"/><path d="M20 20l-4.2-4.2M8 11h6"/>',
+  home:     '<path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9.5h12V10"/>',
+  folder:   '<path d="M3.5 7.5A1.5 1.5 0 0 1 5 6h4l2 2.2h8A1.5 1.5 0 0 1 20.5 9.7v7.8A1.5 1.5 0 0 1 19 19H5a1.5 1.5 0 0 1-1.5-1.5z"/>',
+  calendar: '<rect x="4" y="5.5" width="16" height="15" rx="2.5"/><path d="M4 10h16M8 3.5v4M16 3.5v4"/>',
 }

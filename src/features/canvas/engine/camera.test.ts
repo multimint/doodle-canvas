@@ -6,6 +6,7 @@ import {
   clampZoom,
   zoomToward,
   fitCamera,
+  fitFixedFrame,
   MIN_ZOOM,
   MAX_ZOOM,
   CANVAS_WIDTH,
@@ -76,5 +77,31 @@ describe('fitCamera', () => {
   it('scales down to fit a small container', () => {
     const c = fitCamera(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2)
     expect(c.zoom).toBeCloseTo(0.5)
+  })
+})
+
+describe('fitFixedFrame', () => {
+  // The Day Doodle frame: a 120×90 world enlarged to fill a bigger modal container.
+  it('upscales a small frame past 1:1 (unlike fitCamera)', () => {
+    const c = fitFixedFrame(480, 360, 120, 90)
+    expect(c.zoom).toBeCloseTo(4)
+  })
+
+  it('contains the frame on the limiting axis and centres the slack', () => {
+    // 120×90 (4:3) into a square 360×360: width is the limit → zoom 3, vertical slack centred.
+    const c = fitFixedFrame(360, 360, 120, 90)
+    expect(c.zoom).toBeCloseTo(3)
+    expect(c.panX).toBeCloseTo((360 - 120 * 3) / 2)
+    expect(c.panY).toBeCloseTo((360 - 90 * 3) / 2)
+  })
+
+  it('maps the frame fully inside the container (no overflow)', () => {
+    const c = fitFixedFrame(400, 300, 120, 90)
+    const br = worldToScreen(c, 120, 90)
+    const tl = worldToScreen(c, 0, 0)
+    expect(tl.x).toBeGreaterThanOrEqual(-0.001)
+    expect(tl.y).toBeGreaterThanOrEqual(-0.001)
+    expect(br.x).toBeLessThanOrEqual(400.001)
+    expect(br.y).toBeLessThanOrEqual(300.001)
   })
 })

@@ -215,6 +215,12 @@
 .m-liftable { transition: transform .16s ease, box-shadow .16s ease; cursor: pointer; }
 .m-liftable:hover { transform: translateY(-3px); box-shadow: var(--m-shadow-lg); }
 
+/* planner calendar day — subtle lift on hover (keeps its inset ring) */
+.m-day:hover { transform: translateY(-1px); }
+
+/* dashed "new canvas" tile — warms to the accent on hover */
+.m-newtile:hover { border-color: var(--m-primary); background: color-mix(in oklab, var(--m-primary) 5%, var(--m-surface)); }
+
 /* staggered entrance */
 .m-enter { opacity: 0; animation: m-rise .7s cubic-bezier(.2, .7, .2, 1) forwards; }
 

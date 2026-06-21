@@ -12,7 +12,6 @@ import { useCreateCanvas } from './useCreateCanvas';
 import { DashboardMobile } from './DashboardMobile';
 import { DashboardDesktop } from './DashboardDesktop';
 import type { DashboardViewProps, NavKey } from './DashboardView';
-import type { CanvasDoc } from '../../lib/types';
 
 type ModalConfig = {
   title: string;
@@ -28,14 +27,8 @@ export function Dashboard() {
   const uid = user!.uid;
   const { owned, shared, loading } = useCanvasList(uid);
   const { creating, creatingId, createCanvas } = useCreateCanvas(uid);
-  const [activeNav, setActiveNav] = useState<NavKey>('all');
-  const [searchQueries, setSearchQueries] = useState<Record<NavKey, string>>({
-    all: '',
-    shared: '',
-  });
-  const searchQuery = searchQueries[activeNav];
-  const setSearchQuery = (v: string) =>
-    setSearchQueries((prev) => ({ ...prev, [activeNav]: v }));
+  const [activeNav, setActiveNav] = useState<NavKey>('home');
+  const [searchQuery, setSearchQuery] = useState('');
   const [modal, setModal] = useState<ModalConfig | null>(null);
   const isMobile = useIsMobile();
 
@@ -82,16 +75,10 @@ export function Dashboard() {
     createCanvas();
   };
 
-  // Determine which canvases to show based on nav + search
-  const allCanvases: CanvasDoc[] = (
-    activeNav === 'shared' ? shared : [...owned, ...shared]
-  ).filter((c) => c.id !== creatingId);
-
-  const q = searchQuery.toLowerCase().trim();
-  const filteredCanvases = q
-    ? allCanvases.filter((c) => c.title.toLowerCase().includes(q))
-    : allCanvases;
-
+  // Exclude the canvas currently being created (it gets an optimistic placeholder via the
+  // CreatingOverlay) from the lists the pages render.
+  const visibleOwned = owned.filter((c) => c.id !== creatingId);
+  const visibleShared = shared.filter((c) => c.id !== creatingId);
   const ownedSet = new Set(owned.map((c) => c.id));
 
   const userInitial = (user!.displayName ?? user!.email ?? '?')
@@ -104,18 +91,16 @@ export function Dashboard() {
     uid,
     userInitial,
     userColor,
-    owned,
-    shared,
+    owned: visibleOwned,
+    shared: visibleShared,
+    ownedSet,
     loading,
     creating,
-    filteredCanvases,
-    ownedSet,
-    q,
-    activeNav,
-    setActiveNav,
     searchQuery,
     setSearchQuery,
     totalOwned,
+    activeNav,
+    setActiveNav,
     onSignOut: handleSignOut,
     onCreate: handleCreate,
   };

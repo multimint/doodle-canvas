@@ -4,10 +4,13 @@
 A fixed-size (1920×1080) drawing surface owned by a single **User**. A Canvas has a list of **Members** who may draw on it. A User may own at most 10 Canvases.
 
 ## Stroke
-A single drawing action recorded on a Canvas. A Stroke has a `type` (path, rect, circle, line, text) and carries Konva shape properties as its `data`. A Stroke has exactly one **Author** (the User who created it). Any Member may delete any Stroke. Strokes are immutable once created, with one exception: the **Text Box**.
+A single drawing action recorded on a Canvas. A Stroke has a `type` (path, marker, rect, circle, line, text, sticker, eraser) and carries its shape geometry/style as its `data`, drawn through the stroke-kind registry onto an HTML5 Canvas 2D context (the renderer; not Konva). A Stroke has exactly one **Author** (the User who created it). Any Member may delete any Stroke. Strokes are immutable once created, with one exception: the **Text Box**.
 
 ## Text Box
 A `text`-type Stroke that holds editable, wrapping text within a fixed **width**. It is the only **mutable** Stroke: in **Select Mode** a Member may move it (drag), resize it (drag any of the 8 selection handles — the font stays fixed and text re-wraps), rotate it (drag the knob above the box; rotation is about the box centre), re-edit its text (double-click), or delete it (select + Delete). It is created by selecting the text tool and dragging a rectangle to set its **width and height** (a plain click yields default dimensions). Text wraps to the width and is centered both horizontally and vertically within the fixed box. Edits and moves are written in place to the same Stroke and propagate to all Members in real time.
+
+## Day Doodle
+A small, personal drawing pinned to a single calendar date in the **Planner**, drawn within a fixed 120×90 frame. There is at most one Day Doodle per (User, date). Unlike a **Canvas** it is private (non-collaborative — no Members, no Presence), does not count against the User's 10-Canvas limit, and is not opened as a full canvas document; it is drawn in a modal and shown back on its calendar card as a thumbnail. It reuses the same **Stroke** model and drawing surface as a Canvas, but its strokes are stored inline in one Firestore document under the owner (see ADR 0003) rather than in the realtime database.
 
 ## Select Mode
 The idle interaction state in which no drawing tool is active. It is the only mode where **Text Boxes** are interactive (move / re-edit / delete). It is entered by clicking the active tool again to deselect it, and automatically after a Text Box is created. Dragging empty canvas in Select Mode does nothing.

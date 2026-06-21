@@ -3,6 +3,7 @@ import {
   type Camera,
   clampZoom,
   fitCamera,
+  fitFixedFrame,
   zoomToward,
   MIN_ZOOM,
   MAX_ZOOM,
@@ -37,6 +38,10 @@ interface Options {
   onViewportChange?: (zoom: number, pan: { x: number; y: number }) => void
   // Called when a pinch begins, so the caller can abandon an in-progress stroke.
   onPinchStart?: () => void
+  // When set, the viewport is locked to this fixed world frame: it is fit-and-centred (with
+  // upscaling) into the container on every resize instead of the once-only 1:1-capped fitCamera.
+  // Used by the Day Doodle modal so its 120×90 frame fills the modal and can't be panned/zoomed.
+  fixedFrame?: { width: number; height: number }
 }
 
 // Owns the canvas viewport: zoom + pan (kept in both a ref for synchronous handler reads
@@ -49,6 +54,7 @@ export function useCamera({
   getSceneCanvas,
   onViewportChange,
   onPinchStart,
+  fixedFrame,
 }: Options) {
   const [containerSize, setContainerSize] = useState({ w: 0, h: 0 })
   const camRef = useRef<Camera>({ panX: 0, panY: 0, zoom: 1 })
@@ -105,7 +111,10 @@ export function useCamera({
       const { width, height } = el.getBoundingClientRect()
       if (width === 0 || height === 0) return
       setContainerSize({ w: width, h: height })
-      if (!initializedRef.current) {
+      if (fixedFrame) {
+        // Re-fit the locked frame on every resize so it always fills the container exactly.
+        setCamera(fitFixedFrame(width, height, fixedFrame.width, fixedFrame.height))
+      } else if (!initializedRef.current) {
         initializedRef.current = true
         setCamera(fitCamera(width, height))
       }
@@ -117,7 +126,7 @@ export function useCamera({
       el.removeEventListener('touchstart', preventTwoFingerScroll)
       el.removeEventListener('touchmove', preventTwoFingerScroll)
     }
-  }, [containerRef, setCamera])
+  }, [containerRef, setCamera, fixedFrame?.width, fixedFrame?.height])
 
   // Wheel zoom toward the pointer. anchorX/Y are container-relative px. Stepped to 0.1 and
   // snapped, matching the old wheel feel.
