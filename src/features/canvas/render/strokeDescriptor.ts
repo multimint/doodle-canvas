@@ -7,7 +7,6 @@ import type { Stroke, StrokeData, ToolType } from '../../../lib/types'
 
 export type SimpleStrokeType =
   | 'path'
-  | 'brush'
   | 'marker'
   | 'eraser'
   | 'rect'

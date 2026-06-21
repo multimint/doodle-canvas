@@ -25,7 +25,7 @@ The User who created a Canvas. The Owner may invite others by email to become Me
 An email address recorded on a Canvas that has not yet been claimed. When a User logs in for the first time and their email matches a Pending Invite, they are promoted to Member automatically.
 
 ## Tool Cursor
-A local, presentational follower that depicts the active drawing tool's painted footprint at the pointer: pen and brush show a filled dot in the current colour sized to the stroke, the eraser shows a hollow ring of that size, and the line/rectangle/circle tools show a precise crosshair with a small colour dot. It is shown only for fine pointers (mouse/trackpad) — never on touch — and never while drawing is disabled by the Stroke Cap. Unlike **Presence** cursors it is never persisted or shared with other Members; it exists only in the current client's view.
+A local, presentational follower that depicts the active drawing tool's painted footprint at the pointer: the pen shows a filled dot in the current colour sized to the stroke, the eraser shows a hollow ring of that size, and the line/rectangle/circle tools show a precise crosshair with a small colour dot. It is shown only for fine pointers (mouse/trackpad) — never on touch — and never while drawing is disabled by the Stroke Cap. Unlike **Presence** cursors it is never persisted or shared with other Members; it exists only in the current client's view.
 
 ## Presence
 The real-time record of which Users are currently active on a Canvas, including their cursor position, display name, and avatar. Presence is ephemeral — it is removed when the user disconnects.
@@ -40,4 +40,4 @@ A Session in which the User is identified by a temporary anonymous account rathe
 A per-client, in-memory list of Stroke IDs that the current User has created in this Session. Undo removes the most recent Stroke ID from the stack and deletes that Stroke from the Canvas. The Undo Stack is not persisted.
 
 ## Wiggle
-A per-client visual effect that animates Strokes on the Canvas. Currently only `brush` Strokes animate (their spray jitter advances each frame); all other Stroke types are static. Wiggle is on by default and toggleable per user as a local preference. It is purely presentational — wiggle offsets are never persisted to Firebase or transmitted to other clients. Snapshots capture the rendered state.
+A per-client visual effect that animates Strokes on the Canvas by advancing a small per-vertex jitter ("boil") each frame: lines jitter their vertices, rectangles and circles their outline, and stickers shimmy in place. Wiggle is on by default and toggleable per user as a local preference. It is purely presentational — wiggle offsets are never persisted to Firebase or transmitted to other clients. Snapshots capture the rendered state.

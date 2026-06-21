@@ -368,20 +368,10 @@
   transform: translate(-50%, -50%);
 }
 
-/* Pen: solid dot in the tool colour, sized to the stroke. Also the spray's core dot. */
+/* Pen: solid dot in the tool colour, sized to the stroke. */
 .tool-cursor-dot {
   border-radius: 50%;
   box-shadow: 0 0 0 1.5px #fff, 0 0 3px rgba(0, 0, 0, 0.45);
-}
-
-/* Spray: dashed ring in the tool colour showing the wide spray cloud (border-colour set
-   inline). Paired with a .tool-cursor-dot core so the dense centre reads too. */
-.tool-cursor-spray {
-  border-radius: 50%;
-  border-width: 1.5px;
-  border-style: dashed;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.55);
-  opacity: 0.9;
 }
 
 /* Marker: translucent rounded-square felt nib in the tool colour (background set inline),

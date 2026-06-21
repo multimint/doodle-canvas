@@ -10,7 +10,6 @@ export const MIN_CURSOR_SIZE = 8
 
 export type ToolCursorVariant =
   | 'pen' // pen: precise solid dot in the tool color, sized to the thin stroke
-  | 'spray' // brush/spray: dashed spread ring (the wide cloud) with a solid core dot
   | 'marker' // marker: translucent rounded-square felt nib at the broad marker width
   | 'ring' // eraser: hollow ring, sized to the stroke (no color — it erases)
   | 'crosshair' // line / rect / circle: precise point + small color dot (size is the drag)
@@ -19,7 +18,6 @@ export type ToolCursorVariant =
 
 export function toolCursorVariant(tool: ToolType): ToolCursorVariant {
   if (tool === 'pen') return 'pen'
-  if (tool === 'brush') return 'spray'
   if (tool === 'marker') return 'marker'
   if (tool === 'eraser') return 'ring'
   if (tool === 'line' || tool === 'rect' || tool === 'circle') return 'crosshair'
@@ -34,11 +32,9 @@ export function usesToolCursor(tool: ToolType): boolean {
 }
 
 // How much wider than the picked stroke width the tool actually paints, so each cursor can
-// mirror its real footprint: the pen lays a 1× line, the marker a 3× felt nib, and the spray
-// scatters over a ~5× cloud (sprayUtils uses radius = 2.5× → diameter 5×).
+// mirror its real footprint: the pen lays a 1× line and the marker a 3× felt nib.
 export function toolFootprintScale(tool: ToolType): number {
   if (tool === 'marker') return 3
-  if (tool === 'brush') return 5
   return 1
 }
 

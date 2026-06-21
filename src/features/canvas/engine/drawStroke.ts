@@ -2,31 +2,25 @@ import type { StrokeData } from '../../../lib/types'
 import type { ShapeDescriptor, SimpleStrokeType } from '../render/strokeDescriptor'
 import {
   jitterPoints,
-  jitterMag,
   rectToPerimeter,
   ellipseToPerimeter,
   stickerJitter,
 } from '../utils/wiggleUtils'
-import { sprayFor, drawSpray } from '../utils/sprayUtils'
 import { drawSticker } from '../render/stickerLibrary'
 
 // The immediate-mode twin of the old Konva strokeShapes.tsx: it knows how each non-text
 // stroke type paints onto a raw 2D context that already carries the camera transform. Lines
 // are boiled by jittering their vertices for the current frame (the wiggle.html technique,
 // using the project's deterministic jrand so the look matches the old node-swap boil), rects
-// and circles trace a jittered outline polyline, brush blits its cached spray frames, and
-// stickers stamp from the shared sticker library. Pure drawing — the scene owns the loop and
-// the per-layer routing (markers vs. main), and the boil clock owns `frame`.
+// and circles trace a jittered outline polyline, and stickers stamp from the shared sticker
+// library. Pure drawing — the scene owns the loop and the per-layer routing (markers vs. main),
+// and the boil clock owns `frame`.
 
 // Per-draw boil context. `wiggle` off → draw the clean base geometry (toggle / frozen).
 export interface DrawOpts {
   frame: number
   salt: number
   wiggle: boolean
-  // Device px per world unit (devicePixelRatio × camera zoom) for the spray bitmap cache.
-  pr: number
-  // True for an in-progress stroke (this client's or a remote's) — brush skips its frame cache.
-  live?: boolean
 }
 
 // Default stroke width matches the old renderShape fallback.
@@ -110,20 +104,6 @@ export function drawSimpleStroke(
       ctx.lineWidth = width
       tracePolyline(ctx, frameVerts(base, width, o), true)
       ctx.stroke()
-      break
-    }
-    case 'brush': {
-      // Droplets stay 1px at every size; spread/density scale inside generateSprayPoints.
-      drawSpray(ctx, {
-        sprayPoints: sprayFor(d.points, width),
-        color: d.color ?? '#000',
-        dotSize: 1,
-        // Fixed boil amplitude so a speck hops the same tiny amount at any brush size.
-        jmag: jitterMag(0),
-        frame: o.frame,
-        live: o.live ?? false,
-        pr: o.pr,
-      })
       break
     }
   }

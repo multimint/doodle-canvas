@@ -68,7 +68,7 @@ function mockCtx() {
   }
 }
 
-const baseOpts: DrawOpts = { frame: 0, salt: 7, wiggle: false, pr: 1 }
+const baseOpts: DrawOpts = { frame: 0, salt: 7, wiggle: false }
 
 function desc(over: Partial<ShapeDescriptor>): ShapeDescriptor {
   return {
@@ -131,16 +131,6 @@ describe('drawSimpleStroke', () => {
     const c = mockCtx()
     drawSimpleStroke(c.ctx, 'circle', desc({ x: 0, y: 0, radiusX: 30, radiusY: 10 }), baseOpts)
     expect(c.ops.map((o) => o.op)).toContain('closePath')
-  })
-
-  it('draws spray droplets directly for a live brush stroke', () => {
-    const m = mockCtx()
-    drawSimpleStroke(m.ctx, 'brush', desc({ points: [0, 0, 30, 0], strokeWidth: 10 }), {
-      ...baseOpts,
-      live: true,
-    })
-    expect(m.ops.filter((o) => o.op === 'rect').length).toBeGreaterThan(0)
-    expect(m.ops.map((o) => o.op)).toContain('fill')
   })
 })
 

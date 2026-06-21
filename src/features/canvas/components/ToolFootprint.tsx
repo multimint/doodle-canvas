@@ -15,15 +15,13 @@ interface Props {
 // The inner footprint spans of a tool cursor, WITHOUT any positioning — they rely on a parent
 // with the `.tool-cursor` class (its `> span` rule centres each on the anchor point). ToolCursor
 // wraps this for the local follower; CursorOverlay reuses it so a friend's cursor shows the very
-// same footprint (pen dot / spray cloud / marker nib / eraser ring / shape crosshair).
+// same footprint (pen dot / marker nib / eraser ring / shape crosshair).
 export function ToolFootprint({ tool, color, strokeWidth, zoom }: Props) {
   const variant = toolCursorVariant(tool)
   if (variant === 'none') return null
 
-  // Footprint-sized outer visual; `core` is the thin true stroke width, drawn as the centre
-  // dot inside the spray's spread ring (the dense core of the center-weighted cloud).
+  // Footprint-sized outer visual, scaled to the tool's real painted width.
   const d = toolCursorSize(strokeWidth, zoom, toolFootprintScale(tool))
-  const core = toolCursorSize(strokeWidth, zoom)
 
   return (
     <>
@@ -32,18 +30,6 @@ export function ToolFootprint({ tool, color, strokeWidth, zoom }: Props) {
           className='tool-cursor-dot'
           style={{ width: d, height: d, background: color }}
         />
-      )}
-      {variant === 'spray' && (
-        <>
-          <span
-            className='tool-cursor-spray'
-            style={{ width: d, height: d, borderColor: color }}
-          />
-          <span
-            className='tool-cursor-dot'
-            style={{ width: core, height: core, background: color }}
-          />
-        </>
       )}
       {variant === 'marker' && (
         <span

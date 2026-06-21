@@ -15,6 +15,5 @@ describe('cursorForTool', () => {
     expect(cursorForTool('eraser', false)).toBe('cell')
     expect(cursorForTool('text', false)).toBe('text')
     expect(cursorForTool('pen', false)).toBe('crosshair')
-    expect(cursorForTool('brush', false)).toBe('crosshair')
   })
 })

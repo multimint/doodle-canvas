@@ -39,7 +39,6 @@ function renderStroke(ctx: CanvasRenderingContext2D, stroke: Stroke) {
 
   switch (stroke.type) {
     case 'path':
-    case 'brush':
       ctx.strokeStyle = data.stroke ?? '#000'
       ctx.lineWidth = data.strokeWidth ?? 2
       drawSmoothLine(ctx, data.points ?? [])

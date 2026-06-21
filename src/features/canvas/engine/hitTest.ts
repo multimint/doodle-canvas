@@ -73,7 +73,6 @@ export function pointInRotatedRect(
 // Hit half-width (world px) for a line-family stroke — the on-screen thickness the user aims at.
 function lineThreshold(type: Stroke['type'], sw: number): number {
   if (type === 'marker') return (sw * 3) / 2
-  if (type === 'brush') return sw * 2.5 // spray dispersion radius
   return sw / 2
 }
 

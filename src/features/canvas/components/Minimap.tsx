@@ -46,7 +46,7 @@ export function Minimap({ navHandle, viewport, strokes, minimapHandle }: Props) 
       return
     }
     ctx.setTransform(CACHE_SCALE, 0, 0, CACHE_SCALE, -CACHE_X * CACHE_SCALE, -CACHE_Y * CACHE_SCALE)
-    for (const s of strokes) drawCommitted(ctx, s, 0, false, CACHE_SCALE)
+    for (const s of strokes) drawCommitted(ctx, s, 0, false)
     cacheRef.current = cv
   }, [strokes])
 

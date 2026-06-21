@@ -99,7 +99,6 @@ const DPR = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
 const MARKER_LAYER_OPACITY = 0.82
 const SIMPLE_TYPES: ToolType[] = [
   'pen',
-  'brush',
   'marker',
   'eraser',
   'rect',
@@ -283,7 +282,6 @@ export function CanvasStage({
       if (!mctx || !kctx) return
       const c = camRef.current
       const { w, h } = containerSize
-      const pr = DPR * c.zoom
 
       clearLayer(kctx, w, h, DPR)
       clearLayer(mctx, w, h, DPR)
@@ -294,7 +292,7 @@ export function CanvasStage({
       // Marker layer: markers + eraser masks, in timestamp order.
       for (const s of strokes) {
         if ((s.type === 'marker' || s.type === 'eraser') && isVisible(s, bounds))
-          drawCommitted(kctx, s, frame, wiggle, pr)
+          drawCommitted(kctx, s, frame, wiggle)
       }
       // Live marker / eraser mask on the marker layer.
       if (livePoints.length >= 4 && (tool === 'marker' || tool === 'eraser')) {
@@ -303,12 +301,10 @@ export function CanvasStage({
           frame,
           salt: 0,
           wiggle,
-          pr,
-          live: true,
         })
       }
 
-      // Main layer: simple shapes (pen/brush/eraser/rect/circle/line) in order.
+      // Main layer: simple shapes (pen/eraser/rect/circle/line) in order.
       for (const s of strokes) {
         if (
           s.type !== 'marker' &&
@@ -316,7 +312,7 @@ export function CanvasStage({
           s.type !== 'sticker' &&
           isVisible(s, bounds)
         )
-          drawCommitted(mctx, s, frame, wiggle, pr)
+          drawCommitted(mctx, s, frame, wiggle)
       }
       // Remote live strokes (never text).
       for (const s of Object.values(remoteStrokes ?? {})) {
@@ -326,8 +322,6 @@ export function CanvasStage({
           frame,
           salt: 0,
           wiggle,
-          pr,
-          live: true,
         })
       }
       // This client's live simple stroke (non-marker tools draw on the main layer).
@@ -339,7 +333,7 @@ export function CanvasStage({
           color,
           strokeWidth,
         })
-        drawSimpleStroke(mctx, type, desc, { frame, salt: 0, wiggle, pr, live: true })
+        drawSimpleStroke(mctx, type, desc, { frame, salt: 0, wiggle })
       }
       // Live text sizing rectangle (dashed) while dragging out a new box.
       if (livePoints.length >= 4 && tool === 'text') {
@@ -788,7 +782,7 @@ export function CanvasStage({
       if (!isDrawing.current) return
 
       let newPoints: number[]
-      if (tool === 'pen' || tool === 'brush' || tool === 'marker' || tool === 'eraser') {
+      if (tool === 'pen' || tool === 'marker' || tool === 'eraser') {
         newPoints = [...livePointsRef.current, wp.x, wp.y]
       } else if (liveStartRef.current) {
         newPoints = [liveStartRef.current.x, liveStartRef.current.y, wp.x, wp.y]

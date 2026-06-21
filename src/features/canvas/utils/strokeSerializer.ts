@@ -29,9 +29,6 @@ export function buildStrokeData(
   if (tool === 'pen') {
     return { points: simplifyPoints(points, SIMPLIFY_TOLERANCE), stroke: color, strokeWidth }
   }
-  if (tool === 'brush') {
-    return { points: simplifyPoints(points, SIMPLIFY_TOLERANCE), stroke: color, strokeWidth }
-  }
   if (tool === 'marker') {
     return { points: simplifyPoints(points, SIMPLIFY_TOLERANCE), stroke: color, strokeWidth }
   }

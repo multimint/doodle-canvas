@@ -51,13 +51,11 @@ export function isVisible(stroke: Stroke, bounds: ViewportBounds): boolean {
 }
 
 // Paint one committed stroke onto a context that already carries the camera transform.
-// `pr` (device px per world unit) feeds the spray bitmap cache.
 export function drawCommitted(
   ctx: CanvasRenderingContext2D,
   stroke: Stroke,
   frame: number,
   wiggle: boolean,
-  pr: number,
 ) {
   if (stroke.type === 'text') {
     drawTextStroke(ctx, stroke.data ?? {}, frame, wiggle)
@@ -71,7 +69,7 @@ export function drawCommitted(
     ctx,
     stroke.type as SimpleStrokeType,
     descriptorFromStroke(stroke.data),
-    { frame, salt: hashStr(stroke.id), wiggle, pr },
+    { frame, salt: hashStr(stroke.id), wiggle },
   )
 }
 
@@ -84,10 +82,9 @@ export function drawList(
   bounds: ViewportBounds,
   frame: number,
   wiggle: boolean,
-  pr: number,
 ) {
   for (const s of strokes) {
     if (!isVisible(s, bounds)) continue
-    drawCommitted(ctx, s, frame, wiggle, pr)
+    drawCommitted(ctx, s, frame, wiggle)
   }
 }

@@ -37,10 +37,6 @@ export function strokeBounds(stroke: Stroke): AABB | null {
       box = pointsBounds(d.points)
       pad = (sw * 3) / 2 // rendered 3× wider than its stored strokeWidth (see strokeShapes)
       break
-    case 'brush':
-      box = pointsBounds(d.points)
-      pad = sw * 2.5 // spray dispersion radius (see generateSprayPoints)
-      break
     case 'rect':
       box = {
         minX: d.x ?? 0,
