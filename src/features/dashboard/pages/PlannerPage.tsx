@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from '../../../lib/icons'
-import type { CanvasDoc, Stroke } from '../../../lib/types'
+import type { Stroke } from '../../../lib/types'
+import { useDashboard } from '../DashboardContext'
 import { loadDoodleRange } from '../planner/dayDoodle'
 import { DayDoodleModal } from '../planner/DayDoodleModal'
 import { DayDoodleThumbnail } from '../planner/DayDoodleThumbnail'
@@ -41,7 +42,8 @@ const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 // thumbnails, all animated by one shared boil loop. The side panel lists the selected day's Linked
 // Documents and lets the user add more (link an existing canvas, or create a new Daily Planner /
 // blank Canvas) via the Add-document modal.
-export function PlannerPage({ mobile, uid, owned }: { mobile: boolean; uid: string; owned: CanvasDoc[] }) {
+export function PlannerPage() {
+  const { mobile, uid, owned } = useDashboard()
   const today = new Date()
   // Restore the day the user last had selected (e.g. before opening a linked canvas) so coming back
   // returns to it rather than jumping to today. Scoped to the tab session.

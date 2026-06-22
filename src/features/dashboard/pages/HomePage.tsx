@@ -3,11 +3,13 @@ import { Icon } from '../../../lib/icons'
 import { CanvasCard } from '../CanvasCard'
 import { CanvasListRow } from '../CanvasListRow'
 import { EmptyState, NoResultsState } from '../DashboardEmptyStates'
-import { type PageProps, docCols, filterByTitle, byRecent, SectionHead } from './shared'
+import { docCols, filterByTitle, byRecent, SectionHead } from './shared'
+import { useDashboard } from '../DashboardContext'
 
 // Home: greeting hero + "current focus" card, a "Continue working" grid of the most recent
 // canvases, and a "Recent documents" list of the rest. All fed from real canvases.
-export function HomePage({ user, uid, owned, shared, ownedSet, searchQuery, setSearchQuery, mobile, onCreate }: PageProps) {
+export function HomePage() {
+  const { user, uid, owned, shared, ownedSet, searchQuery, setSearchQuery, mobile, onCreate } = useDashboard()
   const navigate = useNavigate()
 
   const all = [...owned, ...shared].sort(byRecent)

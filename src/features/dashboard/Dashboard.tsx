@@ -11,7 +11,8 @@ import { useIsMobile } from './useIsMobile';
 import { useCreateCanvas } from './useCreateCanvas';
 import { DashboardMobile } from './DashboardMobile';
 import { DashboardDesktop } from './DashboardDesktop';
-import type { DashboardViewProps, NavKey } from './DashboardView';
+import { DashboardProvider, type DashboardContextValue } from './DashboardContext';
+import type { NavKey } from './DashboardView';
 
 type ModalConfig = {
   title: string;
@@ -88,7 +89,7 @@ export function Dashboard() {
     .toUpperCase();
   const userColor = MCOLORS[2];
 
-  const viewProps: DashboardViewProps = {
+  const ctxValue: DashboardContextValue = {
     user: user!,
     uid,
     userInitial,
@@ -105,15 +106,12 @@ export function Dashboard() {
     setActiveNav,
     onSignOut: handleSignOut,
     onCreate: handleCreate,
+    mobile: isMobile,
   };
 
   return (
-    <>
-      {isMobile ? (
-        <DashboardMobile {...viewProps} />
-      ) : (
-        <DashboardDesktop {...viewProps} />
-      )}
+    <DashboardProvider value={ctxValue}>
+      {isMobile ? <DashboardMobile /> : <DashboardDesktop />}
       {modal && (
         <ConfirmModal
           title={modal.title}
@@ -124,6 +122,6 @@ export function Dashboard() {
           onCancel={modal.showCancel ? () => setModal(null) : undefined}
         />
       )}
-    </>
+    </DashboardProvider>
   );
 }

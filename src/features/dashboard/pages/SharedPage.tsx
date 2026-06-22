@@ -1,9 +1,11 @@
 import { CanvasCard } from '../CanvasCard'
 import { NoResultsState } from '../DashboardEmptyStates'
-import { type PageProps, docCols, filterByTitle, byRecent } from './shared'
+import { docCols, filterByTitle, byRecent } from './shared'
+import { useDashboard } from '../DashboardContext'
 
 // Shared: canvases other people invited you to. Always rendered as non-owner cards.
-export function SharedPage({ uid, shared, searchQuery, setSearchQuery, mobile }: PageProps) {
+export function SharedPage() {
+  const { uid, shared, searchQuery, setSearchQuery, mobile } = useDashboard()
   const docs = filterByTitle(shared, searchQuery).sort(byRecent)
 
   return (

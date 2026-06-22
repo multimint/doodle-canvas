@@ -4,8 +4,8 @@ import { HomePage } from './pages/HomePage'
 import { DocumentsPage } from './pages/DocumentsPage'
 import { SharedPage } from './pages/SharedPage'
 import { PlannerPage } from './pages/PlannerPage'
-import type { PageProps } from './pages/shared'
-import type { DashboardViewProps, NavKey } from './DashboardView'
+import { useDashboard } from './DashboardContext'
+import type { NavKey } from './DashboardView'
 
 const TABS: [NavKey, string, string][] = [
   ['home', 'home', 'Home'],
@@ -16,15 +16,11 @@ const TABS: [NavKey, string, string][] = [
 
 // The narrow-viewport Dashboard: stacked header, search (hidden on Planner), the active page,
 // a bottom tab bar, and a floating create button.
-export function DashboardMobile(props: DashboardViewProps) {
+export function DashboardMobile() {
   const {
-    user, uid, userInitial, userColor, owned, shared, ownedSet, loading, creating,
+    user, userInitial, userColor, loading, creating,
     searchQuery, setSearchQuery, totalOwned, activeNav, setActiveNav, onSignOut, onCreate,
-  } = props
-
-  const pageProps: PageProps = {
-    user, uid, owned, shared, ownedSet, searchQuery, setSearchQuery, mobile: true, onCreate,
-  }
+  } = useDashboard()
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', overflow: 'hidden', background: 'var(--m-bg)', position: 'relative' }}>
@@ -72,10 +68,10 @@ export function DashboardMobile(props: DashboardViewProps) {
         <div className='spinner' />
       ) : (
         <div style={{ flex: 1, overflowY: 'auto', padding: '4px 18px 96px', display: 'flex', flexDirection: 'column' }}>
-          {activeNav === 'home' && <HomePage {...pageProps} />}
-          {activeNav === 'documents' && <DocumentsPage {...pageProps} />}
-          {activeNav === 'shared' && <SharedPage {...pageProps} />}
-          {activeNav === 'planner' && <PlannerPage mobile={true} uid={pageProps.uid} owned={pageProps.owned} />}
+          {activeNav === 'home' && <HomePage />}
+          {activeNav === 'documents' && <DocumentsPage />}
+          {activeNav === 'shared' && <SharedPage />}
+          {activeNav === 'planner' && <PlannerPage />}
         </div>
       )}
 

@@ -1,20 +1,5 @@
-import type { User } from 'firebase/auth'
 import type { CanvasDoc } from '../../../lib/types'
 import { Icon } from '../../../lib/icons'
-
-// Props shared by every data-driven dashboard page. Lists already exclude the
-// canvas being created; each page derives its own filtered/sorted view.
-export interface PageProps {
-  user: User
-  uid: string
-  owned: CanvasDoc[]
-  shared: CanvasDoc[]
-  ownedSet: Set<string>
-  searchQuery: string
-  setSearchQuery: (v: string) => void
-  mobile: boolean
-  onCreate: () => void
-}
 
 // Responsive card-grid columns: two-up on mobile, auto-fill otherwise.
 export const docCols = (mobile: boolean, min = 220): React.CSSProperties =>
