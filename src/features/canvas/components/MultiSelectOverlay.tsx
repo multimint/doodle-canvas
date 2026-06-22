@@ -10,6 +10,8 @@ import {
   type HandleRole,
   type RotBox,
 } from '../utils/textBoxGeometry'
+import { beginPointerDrag } from '../utils/pointerDrag'
+import { HANDLE_SIZE as HS, SELECTION_ACCENT as ACCENT, SELECTION_Z } from '../constants'
 import type { XformBox } from './textBoxTypes'
 import type { Camera } from '../engine/camera'
 
@@ -18,9 +20,6 @@ import type { Camera } from '../engine/camera'
 // handles (NO rotate). Resizing a handle affects only that box via `xform`; on release it
 // persists and recomputes the union rect. Reuses the same world-space resize math as the old
 // Konva version (textBoxGeometry), driven by the stage's toWorld() converter.
-
-const HS = 11
-const ACCENT = '#3d5afe'
 
 interface Props {
   multiIds: string[]
@@ -83,36 +82,29 @@ export function MultiSelectOverlay({
     role: HandleRole,
     startRect: RotBox,
   ) => {
-    e.preventDefault()
-    e.stopPropagation()
     handleStartRef.current = startRect
     latest.current = startRect
-    const el = e.currentTarget as HTMLElement
-    el.setPointerCapture(e.pointerId)
-    const move = (ev: PointerEvent) => {
-      const st = handleStartRef.current
-      if (!st) return
-      const nb = resizeFromPointer(role, st, toWorld(ev.clientX, ev.clientY))
-      latest.current = nb
-      setXform({ id, ...nb })
-    }
-    const up = (ev: PointerEvent) => {
-      el.releasePointerCapture(ev.pointerId)
-      el.removeEventListener('pointermove', move)
-      el.removeEventListener('pointerup', up)
-      const fb = latest.current
-      if (fb)
-        onUpdateStroke?.(id, {
-          x: fb.x,
-          y: fb.y,
-          width: fb.width,
-          height: fb.height,
-          rotation: fb.rotation,
-        })
-      recomputeUnion(id, fb)
-    }
-    el.addEventListener('pointermove', move)
-    el.addEventListener('pointerup', up)
+    beginPointerDrag(e, toWorld, {
+      onMove: (wp) => {
+        const st = handleStartRef.current
+        if (!st) return
+        const nb = resizeFromPointer(role, st, wp)
+        latest.current = nb
+        setXform({ id, ...nb })
+      },
+      onEnd: () => {
+        const fb = latest.current
+        if (fb)
+          onUpdateStroke?.(id, {
+            x: fb.x,
+            y: fb.y,
+            width: fb.width,
+            height: fb.height,
+            rotation: fb.rotation,
+          })
+        recomputeUnion(id, fb)
+      },
+    })
   }
 
   return (
@@ -145,7 +137,7 @@ export function MultiSelectOverlay({
               transform: `rotate(${rot}deg)`,
               transformOrigin: 'center center',
               pointerEvents: 'none',
-              zIndex: 5,
+              zIndex: SELECTION_Z,
             }}
           >
             <div

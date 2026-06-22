@@ -55,6 +55,7 @@ import { TextBoxEditor } from './TextBoxEditor'
 import { WiggleFilters } from './WiggleFilters'
 import type { ActiveBox, XformBox, ActiveSticker } from './textBoxTypes'
 import type { LiveStroke } from '../hooks/useLiveStrokes'
+import { MARKER_LAYER_OPACITY } from '../constants'
 
 interface Props {
   strokes: Stroke[]
@@ -115,10 +116,6 @@ interface Props {
 }
 
 const DPR = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
-// Highlighter translucency. Markers paint *opaquely* onto their own layer (so per-pixel the
-// latest/topmost stroke wins and same-color overlaps never darken), and the whole layer is
-// then shown at this alpha — one flat, uniform translucency regardless of how strokes nest.
-const MARKER_LAYER_OPACITY = 0.82
 
 function hexToRgba(hex: string, alpha: number): string {
   const r = parseInt(hex.slice(1, 3), 16)
@@ -255,6 +252,11 @@ export function CanvasStage({
         : undefined,
     boundedFrame:
       boundedView && worldWidth && worldHeight
+        ? { width: worldWidth, height: worldHeight }
+        : undefined,
+    // Free view: fit-and-centre the canvas's own extent (from its document kind).
+    frame:
+      !lockView && !boundedView && worldWidth && worldHeight
         ? { width: worldWidth, height: worldHeight }
         : undefined,
   })

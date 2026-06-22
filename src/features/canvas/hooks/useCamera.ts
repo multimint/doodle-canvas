@@ -48,6 +48,9 @@ interface Options {
   // zoom in, but pan is clamped to the frame edges and zoom can't drop below fit. Used by the
   // Daily Planner ("no infinite" sheet). Mutually exclusive with fixedFrame.
   boundedFrame?: { width: number; height: number }
+  // The canvas's own extent (from its document kind) for the default free view's fit-and-centre.
+  // Defaults to the standard canvas size, so the camera follows the kind rather than a constant.
+  frame?: { width: number; height: number }
 }
 
 // Owns the canvas viewport: zoom + pan (kept in both a ref for synchronous handler reads
@@ -62,7 +65,10 @@ export function useCamera({
   onPinchStart,
   fixedFrame,
   boundedFrame,
+  frame,
 }: Options) {
+  const frameW = frame?.width ?? CANVAS_WIDTH
+  const frameH = frame?.height ?? CANVAS_HEIGHT
   const [containerSize, setContainerSize] = useState({ w: 0, h: 0 })
   const camRef = useRef<Camera>({ panX: 0, panY: 0, zoom: 1 })
   const [cam, setCam] = useState<Camera>(camRef.current)
@@ -156,7 +162,7 @@ export function useCamera({
         }
       } else if (!initializedRef.current) {
         initializedRef.current = true
-        setCamera(fitCamera(width, height))
+        setCamera(fitCamera(width, height, frameW, frameH))
       }
     })
     ro.observe(el)
@@ -166,7 +172,7 @@ export function useCamera({
       el.removeEventListener('touchstart', preventTwoFingerScroll)
       el.removeEventListener('touchmove', preventTwoFingerScroll)
     }
-  }, [containerRef, setCamera, fixedFrame?.width, fixedFrame?.height, boundedFrame?.width, boundedFrame?.height])
+  }, [containerRef, setCamera, fixedFrame?.width, fixedFrame?.height, boundedFrame?.width, boundedFrame?.height, frameW, frameH])
 
   // Wheel zoom toward the pointer. anchorX/Y are container-relative px. Stepped to 0.1 and
   // snapped, matching the old wheel feel.
@@ -246,8 +252,8 @@ export function useCamera({
       setCamera(fitFixedFrame(w, h, boundedFrame.width, boundedFrame.height))
       return
     }
-    setCamera({ zoom: 1, panX: (w - CANVAS_WIDTH) / 2, panY: (h - CANVAS_HEIGHT) / 2 })
-  }, [containerSize, setCamera, boundedFrame])
+    setCamera({ zoom: 1, panX: (w - frameW) / 2, panY: (h - frameH) / 2 })
+  }, [containerSize, setCamera, boundedFrame, frameW, frameH])
 
   const handleTouchEnd = useCallback(() => {
     lastTouchRef.current = null

@@ -13,7 +13,7 @@ import { useUndoStack } from './hooks/useUndoStack'
 import { useLiveStrokes } from './hooks/useLiveStrokes'
 import type { LiveStroke } from './hooks/useLiveStrokes'
 import { CanvasStage } from './components/CanvasStage'
-import { stepStrokeWidth } from './utils/strokeSize'
+import { stepStrokeWidth, effectiveStrokeWidth as computeEffectiveStrokeWidth } from './utils/strokeSize'
 import type { NavHandle } from './hooks/useCamera'
 import { CanvasTopBar } from './components/CanvasTopBar'
 import { useCanvasKeyboard } from './hooks/useCanvasKeyboard'
@@ -69,12 +69,7 @@ export function CanvasPage() {
   const [wiggle, setWiggle] = useState(true)
   const [selectedSticker, setSelectedSticker] = useState('flower')
 
-  // The eraser paints (and its cursor ring shows) at a multiple of the chosen size. This
-  // flows to the committed eraser stroke, its follower cursor, AND the cursor broadcast to
-  // friends, so everyone sees the same footprint.
-  const ERASER_SCALE = 4
-  const effectiveStrokeWidth =
-    tool === 'eraser' ? strokeWidth * ERASER_SCALE : strokeWidth
+  const effectiveStrokeWidth = computeEffectiveStrokeWidth(tool, strokeWidth)
 
   useEffect(() => { toolRef.current = tool }, [tool])
 

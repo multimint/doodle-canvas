@@ -4,7 +4,7 @@ import type { Stroke, StrokeData, ToolType } from '../../../lib/types'
 import { CanvasStage } from '../../canvas/components/CanvasStage'
 import { Toolbar } from '../../canvas/components/Toolbar'
 import { toolbarTools } from '../../canvas/tools/registry'
-import { stepStrokeWidth } from '../../canvas/utils/strokeSize'
+import { stepStrokeWidth, effectiveStrokeWidth as computeEffectiveStrokeWidth } from '../../canvas/utils/strokeSize'
 import { DateBadge } from './DateBadge'
 import {
   DAY_FRAME,
@@ -20,7 +20,6 @@ const DOODLE_TOOLS = toolbarTools().filter(
   (t) => t.id !== 'line' && t.id !== 'rect' && t.id !== 'circle',
 )
 
-const ERASER_SCALE = 4
 const SAVE_DEBOUNCE_MS = 800
 
 const fmtShort = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' })
@@ -58,7 +57,7 @@ export function DayDoodleModal({ uid, date, isoDate, onClose }: Props) {
   const dirtyRef = useRef<Stroke[] | null>(null)
   const saveTimer = useRef<number | undefined>(undefined)
 
-  const effectiveStrokeWidth = tool === 'eraser' ? strokeWidth * ERASER_SCALE : strokeWidth
+  const effectiveStrokeWidth = computeEffectiveStrokeWidth(tool, strokeWidth)
 
   // Load this day's doodle once.
   useEffect(() => {

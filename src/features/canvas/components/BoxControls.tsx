@@ -6,6 +6,8 @@ import {
   type HandleRole,
   type RotBox,
 } from '../utils/textBoxGeometry'
+import { beginPointerDrag } from '../utils/pointerDrag'
+import { HANDLE_SIZE as HS, ROTATE_GAP as ROT_GAP, SELECTION_ACCENT as ACCENT, SELECTION_Z } from '../constants'
 
 // Selection chrome (dashed border + rotate knob + 8 resize handles) for the active Text Box /
 // sticker, as a DOM overlay. The old version rendered these as Konva nodes inside a rotated
@@ -13,10 +15,6 @@ import {
 // handles out in its local frame, so a constant on-screen handle size needs no per-zoom scaling.
 // Handle drags reuse the exact same world-space resize/rotate math (textBoxGeometry), driven by
 // a toWorld() converter the stage supplies. onChange streams live geometry; onCommit persists.
-
-const HS = 11 // handle size, constant screen px
-const ROT_GAP = 26 // rotate-knob gap above the top edge, screen px
-const ACCENT = '#3d5afe'
 
 interface Props {
   box: RotBox // world geometry
@@ -66,25 +64,16 @@ export function BoxControls({
     e: React.PointerEvent,
     compute: (wp: { x: number; y: number }) => Partial<RotBox>,
   ) => {
-    e.preventDefault()
-    e.stopPropagation()
     handleStartRef.current = st0
     latest.current = st0
-    const el = e.currentTarget as HTMLElement
-    el.setPointerCapture(e.pointerId)
-    const move = (ev: PointerEvent) => {
-      const patch = compute(toWorld(ev.clientX, ev.clientY))
-      latest.current = { ...latest.current, ...patch }
-      onChange(patch)
-    }
-    const up = (ev: PointerEvent) => {
-      el.releasePointerCapture(ev.pointerId)
-      el.removeEventListener('pointermove', move)
-      el.removeEventListener('pointerup', up)
-      onCommit(latest.current)
-    }
-    el.addEventListener('pointermove', move)
-    el.addEventListener('pointerup', up)
+    beginPointerDrag(e, toWorld, {
+      onMove: (wp) => {
+        const patch = compute(wp)
+        latest.current = { ...latest.current, ...patch }
+        onChange(patch)
+      },
+      onEnd: () => onCommit(latest.current),
+    })
   }
 
   const handleStyle = (lx: number, ly: number, cursor: string): React.CSSProperties => ({
@@ -113,7 +102,7 @@ export function BoxControls({
         transform: `rotate(${box.rotation}deg)`,
         transformOrigin: 'center center',
         pointerEvents: 'none',
-        zIndex: 5,
+        zIndex: SELECTION_Z,
       }}
     >
       {/* Dashed border */}

@@ -81,14 +81,20 @@ export function zoomToward(
   }
 }
 
-// Initial fit: scale the fixed canvas extent to fit the container (never up past 1:1) and
-// centre it. Returns the starting camera. Mirrors useViewport's first-resize behaviour.
-export function fitCamera(w: number, h: number): Camera {
-  const zoom = Math.min(1, w / CANVAS_WIDTH, h / CANVAS_HEIGHT)
+// Initial fit: scale the canvas extent to fit the container (never up past 1:1) and centre it.
+// Returns the starting camera. The frame defaults to the standard canvas size but a document kind
+// can pass its own dimensions, so the camera follows the kind instead of a hardcoded extent.
+export function fitCamera(
+  w: number,
+  h: number,
+  frameW = CANVAS_WIDTH,
+  frameH = CANVAS_HEIGHT,
+): Camera {
+  const zoom = Math.min(1, w / frameW, h / frameH)
   return {
     zoom,
-    panX: (w - CANVAS_WIDTH * zoom) / 2,
-    panY: (h - CANVAS_HEIGHT * zoom) / 2,
+    panX: (w - frameW * zoom) / 2,
+    panY: (h - frameH * zoom) / 2,
   }
 }
 
