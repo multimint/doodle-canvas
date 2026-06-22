@@ -4,6 +4,7 @@ import { Icon } from '../../../lib/icons'
 import { ConfirmModal } from '../../../lib/ConfirmModal'
 import { documentKind } from '../../canvas/documents/registry'
 import { deleteCanvas } from '../../../data/canvases'
+import { CanvasPreview } from '../CanvasPreview'
 import { removeDayLink, type ResolvedLink } from './plannerLinks'
 
 interface Props {
@@ -23,7 +24,6 @@ export function LinkedDocRow({ resolved, uid, iso, onChanged }: Props) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const kind = documentKind(canvas?.kind ?? link.kind)
   const isOwner = canvas?.ownerId === uid
-  const iconName = kind.id === 'daily-planner' ? 'calendar' : 'folder'
 
   const unlink = async () => {
     await removeDayLink(uid, iso, link.canvasId).catch((e) => console.error('Failed to unlink', e))
@@ -60,12 +60,13 @@ export function LinkedDocRow({ resolved, uid, iso, onChanged }: Props) {
         onKeyDown={(e) => e.key === 'Enter' && navigate(`/canvas/${canvas.id}`)}
         style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 11, cursor: 'pointer', userSelect: 'none' }}
       >
+        {/* Live thumbnail of the linked canvas (same preview the dashboard cards use), so the day
+            panel shows what's inside each document rather than a generic icon. */}
         <div style={{
-          width: 34, height: 34, borderRadius: 10, flex: '0 0 auto',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'var(--m-bg-2)', color: 'var(--m-ink-2)',
+          width: 56, flex: '0 0 auto', borderRadius: 9, overflow: 'hidden',
+          background: 'var(--m-bg-2)', border: '1px solid var(--m-line)',
         }}>
-          <Icon name={iconName} size={17} />
+          <CanvasPreview canvasId={canvas.id} kind={canvas.kind ?? link.kind} />
         </div>
         <div className="m-col m-grow" style={{ gap: 2, minWidth: 0 }}>
           <div className="m-bold" style={{ fontSize: 13.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
