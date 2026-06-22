@@ -165,7 +165,7 @@ export function PlannerPage({ mobile, uid, owned }: { mobile: boolean; uid: stri
   }
 
   const calendar = (
-    <div className="m-card" style={{ padding: mobile ? 14 : 20, flex: stack ? 'none' : '1 1 auto' }}>
+    <div className="m-card" style={{ padding: 20, flex: stack ? 'none' : '1 1 auto' }}>
       <div className="m-row m-between" style={{ alignItems: 'center', marginBottom: 18 }}>
         <div className="m-row m-g12" style={{ alignItems: 'center' }}>
           <div className="m-display" style={{ fontSize: 24 }}>{fmtMonthYear.format(month)}</div>
@@ -191,15 +191,15 @@ export function PlannerPage({ mobile, uid, owned }: { mobile: boolean; uid: stri
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: mobile ? 5 : 9, marginBottom: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 9, marginBottom: 8 }}>
         {DOW.map((d) => (
           <div key={d} className="m-eyebrow" style={{ fontSize: 10.5, textAlign: 'center', letterSpacing: '.08em' }}>
-            {mobile ? d[0] : d}
+            {d}
           </div>
         ))}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: mobile ? 5 : 9 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 9 }}>
         {visibleDays.map((d) => {
           const out = d.getMonth() !== month.getMonth()
           const isSel = sameDay(d, selected)
