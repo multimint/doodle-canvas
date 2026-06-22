@@ -10,25 +10,7 @@ import { useSharedBoil } from '../planner/useSharedBoil'
 import { loadDayLinks, loadDayLinksRange, resolveLinks, type ResolvedLink } from '../planner/plannerLinks'
 import { LinkedDocRow } from '../planner/LinkedDocRow'
 import { AddDocumentModal } from '../planner/AddDocumentModal'
-
-// ----------------------------------------------------------------- date helpers ---
-function isoDate(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-function sameDay(a: Date, b: Date) {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
-}
-// 6-week (42-cell) Monday-first grid covering the given month.
-function monthGrid(date: Date): Date[] {
-  const first = new Date(date.getFullYear(), date.getMonth(), 1)
-  const start = new Date(first)
-  start.setDate(first.getDate() - ((first.getDay() + 6) % 7))
-  return Array.from({ length: 42 }, (_, i) => {
-    const d = new Date(start)
-    d.setDate(start.getDate() + i)
-    return d
-  })
-}
+import { isoDate, parseIsoDate, sameDay, monthGrid } from '../planner/calendar'
 
 const fmtShort = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' })
 const fmtFull = new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
@@ -49,12 +31,10 @@ export function PlannerPage() {
   // returns to it rather than jumping to today. Scoped to the tab session.
   const [selected, setSelected] = useState(() => {
     const saved = sessionStorage.getItem('plannerSelectedDate')
-    if (saved && /^\d{4}-\d{2}-\d{2}$/.test(saved)) {
-      const [y, m, d] = saved.split('-').map(Number)
-      const dt = new Date(y, m - 1, d)
-      if (!Number.isNaN(dt.getTime())) return dt
-    }
-    return new Date(today.getFullYear(), today.getMonth(), today.getDate())
+    return (
+      (saved && parseIsoDate(saved)) ||
+      new Date(today.getFullYear(), today.getMonth(), today.getDate())
+    )
   })
   const [month, setMonth] = useState(() => new Date(selected.getFullYear(), selected.getMonth(), 1))
   const [editMode, setEditMode] = useState(false)

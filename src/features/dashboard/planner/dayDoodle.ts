@@ -36,11 +36,6 @@ export interface DayDoodleDoc {
   updatedAt?: unknown
 }
 
-// ISO yyyy-mm-dd in local time (matches PlannerPage's own isoDate). Used as the doc id.
-export function isoDate(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
 function doodlesCol(uid: string) {
   return collection(db, 'users', uid, 'dayDoodles')
 }

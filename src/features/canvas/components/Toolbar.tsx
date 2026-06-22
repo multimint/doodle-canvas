@@ -1,15 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Icon } from '../../../lib/icons';
 import type { ToolType } from '../../../lib/types';
 import type { ToolDescriptor } from '../tools/registry';
-import { STROKE_SIZES } from '../utils/strokeSize';
 import { toolbarTools } from '../tools/registry';
-import {
-  STICKER_IDS,
-  STICKER_LABELS,
-  drawSticker,
-  onStickerLoad,
-} from '../render/stickerLibrary';
+import { ColorSizePopover } from './toolbar/ColorSizePopover';
+import { StickerPopover } from './toolbar/StickerPopover';
 
 interface Props {
   tool: ToolType;
@@ -38,76 +33,12 @@ interface Props {
 // the table surfaces it here automatically — no parallel list to keep in sync.
 const DRAW_TOOLS = toolbarTools();
 
-const PALETTE = [
-  '#14151c',
-  '#3d5afe',
-  '#12c2e9',
-  '#15cf7f',
-  '#ffb01f',
-  '#ff5d73',
-  '#ff62b0',
-  '#9b5de5',
-  '#ffffff',
-];
-const SIZES = STROKE_SIZES;
-
-// Small canvas thumbnail for a single sticker
-function StickerThumb({
-  id,
-  selected,
-  onClick,
-}: {
-  id: string;
-  selected: boolean;
-  onClick: () => void;
-}) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  // Repaint when the sticker SVG finishes decoding (it loads async).
-  const [ready, setReady] = useState(0);
-  useEffect(() => onStickerLoad(() => setReady((n) => n + 1)), []);
-  useEffect(() => {
-    const el = canvasRef.current;
-    if (!el) return;
-    const dpr = window.devicePixelRatio || 1;
-    el.width = 36 * dpr;
-    el.height = 36 * dpr;
-    const ctx = el.getContext('2d');
-    if (!ctx) return;
-    ctx.clearRect(0, 0, el.width, el.height);
-    ctx.save();
-    ctx.scale(dpr, dpr);
-    ctx.translate(18, 18);
-    drawSticker(ctx, id, 14, '#333333');
-    ctx.restore();
-  }, [id, ready]);
-
-  return (
-    <button
-      title={STICKER_LABELS[id]}
-      onClick={onClick}
-      style={{
-        width: 36,
-        height: 36,
-        borderRadius: 9,
-        border: 'none',
-        cursor: 'pointer',
-        padding: 0,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: selected ? 'var(--m-bg-2)' : 'transparent',
-        boxShadow: selected ? 'inset 0 0 0 2px var(--m-accent)' : 'none',
-      }}
-    >
-      <canvas
-        ref={canvasRef}
-        width={36}
-        height={36}
-        style={{ display: 'block', width: 36, height: 36 }}
-      />
-    </button>
+const divider = (vertical: boolean) =>
+  vertical ? (
+    <div style={{ width: 30, height: 1, background: 'var(--m-line)', margin: '6px 0', flexShrink: 0 }} />
+  ) : (
+    <div style={{ width: 1, height: 28, background: 'var(--m-line)', flexShrink: 0, margin: '0 4px' }} />
   );
-}
 
 export function Toolbar({
   tool,
@@ -129,9 +60,14 @@ export function Toolbar({
 
   // Open the sticker panel automatically when the sticker tool is activated
   useEffect(() => {
-    if (tool === 'sticker') setShowStickers(true);
-    else setShowStickers(false);
+    setShowStickers(tool === 'sticker');
   }, [tool]);
+
+  // Activate a tool (or toggle back to select), closing the colour picker.
+  const pickTool = (id: ToolType) => {
+    onToolChange(tool === id ? 'select' : id);
+    setShowPicker(false);
+  };
 
   const colorSwatch = (
     <button
@@ -151,147 +87,33 @@ export function Toolbar({
           background: color,
           flexShrink: 0,
           display: 'block',
-          boxShadow:
-            color === '#ffffff' ? 'inset 0 0 0 1.5px var(--m-line-2)' : 'none',
+          boxShadow: color === '#ffffff' ? 'inset 0 0 0 1.5px var(--m-line-2)' : 'none',
         }}
       />
     </button>
   );
 
   const picker = showPicker && (
-    <>
-      <div
-        style={{ position: 'fixed', inset: 0, zIndex: 9 }}
-        onClick={() => setShowPicker(false)}
-      />
-      <div
-        className='m-card'
-        style={{
-          position: 'absolute',
-          ...(horizontal
-            ? { bottom: 'calc(100% + 8px)', left: 0 }
-            : { left: 'calc(100% + 12px)', top: 0 }),
-          padding: 12,
-          zIndex: 20,
-          borderRadius: 16,
-          boxShadow: 'var(--m-shadow-lg)',
-          minWidth: 158,
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(5, 1fr)',
-            gap: 9,
-          }}
-        >
-          {PALETTE.map((c) => (
-            <button
-              key={c}
-              className='m-swatch'
-              onClick={() => {
-                onColorChange(c);
-                if (tool === 'eraser') onToolChange('pen');
-              }}
-              style={{
-                width: 24,
-                height: 24,
-                borderRadius: 8,
-                background: c,
-                border: 'none',
-                cursor: 'pointer',
-                boxShadow:
-                  c === color
-                    ? '0 0 0 2.5px var(--m-ink)'
-                    : c === '#ffffff'
-                      ? 'inset 0 0 0 1.5px var(--m-line-2)'
-                      : 'none',
-              }}
-            />
-          ))}
-        </div>
-        <div
-          style={{ height: 1, background: 'var(--m-line)', margin: '11px 0' }}
-        />
-        <div className='m-row' style={{ justifyContent: 'space-between' }}>
-          {SIZES.map((s) => (
-            <button
-              key={s}
-              onClick={() => onStrokeWidthChange(s)}
-              style={{
-                width: 30,
-                height: 30,
-                borderRadius: 9,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                border: 'none',
-                background: strokeWidth === s ? 'var(--m-bg-2)' : 'transparent',
-                boxShadow:
-                  strokeWidth === s
-                    ? 'inset 0 0 0 1.5px var(--m-line-2)'
-                    : 'none',
-              }}
-            >
-              <span
-                style={{
-                  width: Math.min(s + 4, 22),
-                  height: Math.min(s + 4, 22),
-                  borderRadius: '50%',
-                  background: 'var(--m-ink)',
-                  display: 'block',
-                }}
-              />
-            </button>
-          ))}
-        </div>
-      </div>
-    </>
+    <ColorSizePopover
+      horizontal={horizontal}
+      color={color}
+      strokeWidth={strokeWidth}
+      tool={tool}
+      onColorChange={onColorChange}
+      onStrokeWidthChange={onStrokeWidthChange}
+      onToolChange={onToolChange}
+      onClose={() => setShowPicker(false)}
+    />
   );
 
   const stickerPanel = showStickers && (
-    <>
-      <div
-        style={{ position: 'fixed', inset: 0, zIndex: 9 }}
-        onClick={() => setShowStickers(false)}
-      />
-      <div
-        className='m-card'
-        style={{
-          position: 'absolute',
-          ...(horizontal
-            ? { bottom: 'calc(100% + 8px)', left: 0 }
-            : { left: 'calc(100% + 12px)', top: 0 }),
-          padding: 10,
-          zIndex: 20,
-          borderRadius: 16,
-          boxShadow: 'var(--m-shadow-lg)',
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(4, 1fr)',
-            gap: 4,
-          }}
-        >
-          {STICKER_IDS.map((id) => (
-            <StickerThumb
-              key={id}
-              id={id}
-              selected={selectedSticker === id}
-              onClick={() => {
-                onStickerChange(id);
-                onToolChange('sticker');
-              }}
-            />
-          ))}
-        </div>
-      </div>
-    </>
+    <StickerPopover
+      horizontal={horizontal}
+      selectedSticker={selectedSticker}
+      onStickerChange={onStickerChange}
+      onToolChange={onToolChange}
+      onClose={() => setShowStickers(false)}
+    />
   );
 
   /* ── Horizontal bottom bar (mobile) ── */
@@ -321,25 +143,13 @@ export function Toolbar({
           {picker}
         </div>
 
-        {/* Divider */}
-        <div
-          style={{
-            width: 1,
-            height: 28,
-            background: 'var(--m-line)',
-            flexShrink: 0,
-            margin: '0 4px',
-          }}
-        />
+        {divider(false)}
 
         {/* Hand / pan tool — lets touch users drag to pan with one finger. */}
         {showHand && (
           <button
             title='Hand'
-            onClick={() => {
-              onToolChange(tool === 'hand' ? 'select' : 'hand');
-              setShowPicker(false);
-            }}
+            onClick={() => pickTool('hand')}
             className={'m-tool ' + (tool === 'hand' ? 'm-tool-on' : '')}
             style={{ flexShrink: 0, width: 40, height: 40 }}
           >
@@ -352,10 +162,7 @@ export function Toolbar({
           <div key={id} style={{ position: 'relative', flexShrink: 0 }}>
             <button
               title={label}
-              onClick={() => {
-                onToolChange(tool === id ? 'select' : id);
-                setShowPicker(false);
-              }}
+              onClick={() => pickTool(id)}
               className={'m-tool ' + (tool === id ? 'm-tool-on' : '')}
               style={{ flexShrink: 0, width: 40, height: 40 }}
             >
@@ -365,40 +172,19 @@ export function Toolbar({
           </div>
         ))}
 
-        {/* Divider */}
-        <div
-          style={{
-            width: 1,
-            height: 28,
-            background: 'var(--m-line)',
-            flexShrink: 0,
-            margin: '0 4px',
-          }}
-        />
+        {divider(false)}
 
         {/* Eraser */}
         <button
           title='Eraser'
-          onClick={() => {
-            onToolChange(tool === 'eraser' ? 'select' : 'eraser');
-            setShowPicker(false);
-          }}
+          onClick={() => pickTool('eraser')}
           className={'m-tool ' + (tool === 'eraser' ? 'm-tool-on' : '')}
           style={{ flexShrink: 0, width: 40, height: 40 }}
         >
           <Icon name='eraser' size={19} />
         </button>
 
-        {/* Divider */}
-        <div
-          style={{
-            width: 1,
-            height: 28,
-            background: 'var(--m-line)',
-            flexShrink: 0,
-            margin: '0 4px',
-          }}
-        />
+        {divider(false)}
 
         {/* Clear */}
         <button
@@ -446,24 +232,12 @@ export function Toolbar({
         <>
           <button
             title='Hand (Space)'
-            onClick={() => {
-              onToolChange(tool === 'hand' ? 'select' : 'hand');
-              setShowPicker(false);
-            }}
+            onClick={() => pickTool('hand')}
             className={'m-tool ' + (tool === 'hand' ? 'm-tool-on' : '')}
           >
             <Icon name='hand' size={20} />
           </button>
-
-          <div
-            style={{
-              width: 30,
-              height: 1,
-              background: 'var(--m-line)',
-              margin: '2px 0',
-              flexShrink: 0,
-            }}
-          />
+          {divider(true)}
         </>
       )}
 
@@ -471,10 +245,7 @@ export function Toolbar({
         <div key={id} style={{ position: 'relative' }}>
           <button
             title={label}
-            onClick={() => {
-              onToolChange(tool === id ? 'select' : id);
-              setShowPicker(false);
-            }}
+            onClick={() => pickTool(id)}
             className={'m-tool ' + (tool === id ? 'm-tool-on' : '')}
           >
             <Icon name={icon} size={20} />
@@ -483,15 +254,7 @@ export function Toolbar({
         </div>
       ))}
 
-      <div
-        style={{
-          width: 30,
-          height: 1,
-          background: 'var(--m-line)',
-          margin: '6px 0',
-          flexShrink: 0,
-        }}
-      />
+      {divider(true)}
 
       <div style={{ position: 'relative' }}>
         {colorSwatch}
@@ -500,10 +263,7 @@ export function Toolbar({
 
       <button
         title='Eraser'
-        onClick={() => {
-          onToolChange(tool === 'eraser' ? 'select' : 'eraser');
-          setShowPicker(false);
-        }}
+        onClick={() => pickTool('eraser')}
         className={'m-tool ' + (tool === 'eraser' ? 'm-tool-on' : '')}
       >
         <Icon name='eraser' size={20} />
