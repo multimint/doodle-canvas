@@ -92,15 +92,47 @@ export function fitCamera(w: number, h: number): Camera {
   }
 }
 
+// The zoom that fits a world frame (fw×fh) inside a container (w×h) on its limiting axis, with no
+// 1:1 ceiling (so a small frame is upscaled). Shared by the locked Day Doodle view and the bounded
+// Daily Planner view (where it also doubles as the minimum zoom — you can't zoom out past fit).
+export function fitZoom(w: number, h: number, fw: number, fh: number): number {
+  return Math.min(w / fw, h / fh)
+}
+
 // Fit a small fixed world frame (fw×fh, e.g. a 120×90 Day Doodle) into the container, centred.
 // Unlike fitCamera this *upscales* (no 1:1 ceiling) so a tiny frame fills a much larger modal,
 // and it is re-applied on every resize so a locked view always shows the whole frame and nothing
 // outside it.
 export function fitFixedFrame(w: number, h: number, fw: number, fh: number): Camera {
-  const zoom = Math.min(w / fw, h / fh)
+  const zoom = fitZoom(w, h, fw, fh)
   return {
     zoom,
     panX: (w - fw * zoom) / 2,
     panY: (h - fh * zoom) / 2,
+  }
+}
+
+// Clamp a camera's pan so a world frame [0,fw]×[0,fh] never reveals empty space beyond its edges
+// in a container of size (w, h). Per axis: when the scaled frame is larger than the viewport the
+// pan is clamped so neither edge moves inside the viewport (the frame always covers it); when it is
+// smaller (or equal) the frame is centred. Powers the Daily Planner's bounded view — zoom is free
+// but panning can't escape the sheet. Zoom is left untouched (floor it at fitZoom separately).
+export function clampPan(
+  cam: Camera,
+  w: number,
+  h: number,
+  fw: number,
+  fh: number,
+): Camera {
+  const clampAxis = (pan: number, container: number, frame: number): number => {
+    const scaled = frame * cam.zoom
+    if (scaled <= container) return (container - scaled) / 2 // centre the slack
+    // Frame larger than viewport: keep [min,max] = [container - scaled, 0] so edges stay outside.
+    return Math.min(0, Math.max(container - scaled, pan))
+  }
+  return {
+    zoom: cam.zoom,
+    panX: clampAxis(cam.panX, w, fw),
+    panY: clampAxis(cam.panY, h, fh),
   }
 }

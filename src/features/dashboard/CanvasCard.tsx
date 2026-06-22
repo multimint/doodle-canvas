@@ -1,12 +1,15 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { doc, increment, writeBatch, updateDoc, arrayRemove } from 'firebase/firestore'
+import { doc, updateDoc, arrayRemove } from 'firebase/firestore'
 import { ref as rtdbRef, remove } from 'firebase/database'
 import { db, rtdb } from '../../lib/firebase'
 import type { CanvasDoc } from '../../lib/types'
-import { MCOLORS } from '../../lib/icons'
+import { Icon, MCOLORS } from '../../lib/icons'
 import { ConfirmModal } from '../../lib/ConfirmModal'
 import { CanvasPreview } from './CanvasPreview'
+import { deleteCanvas } from './deleteCanvas'
+
+const isPlanner = (c: CanvasDoc) => c.kind === 'daily-planner'
 
 interface Props {
   canvas: CanvasDoc
@@ -63,11 +66,7 @@ export function CanvasCard({ canvas, isOwner, uid }: Props) {
       danger: true,
       onConfirm: async () => {
         setModal(null)
-        const batch = writeBatch(db)
-        batch.delete(doc(db, 'canvases', canvas.id))
-        batch.update(doc(db, 'users', uid), { canvasCount: increment(-1) })
-        await batch.commit()
-        await remove(rtdbRef(rtdb, `canvases/${canvas.id}`))
+        await deleteCanvas(uid, canvas.id)
       },
     })
   }
@@ -130,7 +129,7 @@ export function CanvasCard({ canvas, isOwner, uid }: Props) {
             borderRadius: '50%', background: pickColor(canvas.id), opacity: 0.16, filter: 'blur(20px)',
             pointerEvents: 'none',
           }} />
-          <CanvasPreview canvasId={canvas.id} accentColor={pickColor(canvas.id)} />
+          <CanvasPreview canvasId={canvas.id} accentColor={pickColor(canvas.id)} kind={canvas.kind} />
 
           {!isOwner && (
             <span
@@ -139,6 +138,15 @@ export function CanvasCard({ canvas, isOwner, uid }: Props) {
             >
               <span style={{ width: 7, height: 7, borderRadius: 9, background: MCOLORS[5] }} />
               Shared
+            </span>
+          )}
+          {isPlanner(canvas) && (
+            <span
+              className="m-tag"
+              style={{ position: 'absolute', right: 9, top: 9, background: 'rgba(255,255,255,.94)', color: 'var(--m-ink-2)' }}
+            >
+              <Icon name="calendar" size={11} />
+              Planner
             </span>
           )}
         </div>

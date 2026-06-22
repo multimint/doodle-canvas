@@ -10,6 +10,16 @@ import {
 import { ref, set } from 'firebase/database'
 import { db, rtdb } from '../../lib/firebase'
 import { documentKind, DEFAULT_DOCUMENT_KIND } from '../canvas/documents/registry'
+import { addDayLink } from './planner/plannerLinks'
+
+interface CreateCanvasOptions {
+  // Document-kind template to create from (defaults to the plain Canvas).
+  kindId?: string
+  // Document name. Falls back to the kind's default title (or 'Untitled Canvas') when blank.
+  title?: string
+  // Link the new canvas to a Planner day on create (used by the Planner's Add-document flow).
+  linkTo?: { uid: string; iso: string }
+}
 
 // Creates a new canvas (Firestore doc + RTDB access entries + owner canvasCount bump),
 // holds the in-flight `creating`/`creatingId` state for the overlay, and navigates to
@@ -19,15 +29,16 @@ export function useCreateCanvas(uid: string) {
   const [creating, setCreating] = useState(false)
   const [creatingId, setCreatingId] = useState<string | null>(null)
 
-  const createCanvas = async (kindId: string = DEFAULT_DOCUMENT_KIND) => {
+  const createCanvas = async ({ kindId = DEFAULT_DOCUMENT_KIND, title, linkTo }: CreateCanvasOptions = {}) => {
     setCreating(true)
     try {
       const kind = documentKind(kindId)
+      const finalTitle = title?.trim() || kind.defaultTitle || 'Untitled Canvas'
       const canvasRef = doc(collection(db, 'canvases'))
       setCreatingId(canvasRef.id)
       const batch = writeBatch(db)
       batch.set(canvasRef, {
-        title: 'Untitled Canvas',
+        title: finalTitle,
         ownerId: uid,
         members: [],
         pendingInvites: [],
@@ -53,6 +64,15 @@ export function useCreateCanvas(uid: string) {
           ),
         new Promise((resolve) => setTimeout(resolve, 900)),
       ])
+
+      // Pin the new canvas to its Planner day, if requested, before navigating into it.
+      if (linkTo) {
+        await addDayLink(linkTo.uid, linkTo.iso, {
+          canvasId: canvasRef.id,
+          title: finalTitle,
+          kind: kind.id,
+        }).catch((e) => console.error('Failed to link new canvas to day', e))
+      }
 
       navigate(`/canvas/${canvasRef.id}`)
     } finally {

@@ -75,7 +75,7 @@ export function DashboardMobile(props: DashboardViewProps) {
           {activeNav === 'home' && <HomePage {...pageProps} />}
           {activeNav === 'documents' && <DocumentsPage {...pageProps} />}
           {activeNav === 'shared' && <SharedPage {...pageProps} />}
-          {activeNav === 'planner' && <PlannerPage mobile={true} uid={pageProps.uid} />}
+          {activeNav === 'planner' && <PlannerPage mobile={true} uid={pageProps.uid} owned={pageProps.owned} />}
         </div>
       )}
 

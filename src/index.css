@@ -457,6 +457,21 @@
   margin: 40px auto;
 }
 
+/* Skeleton placeholder: a soft shimmering block used while content loads. */
+@keyframes m-skeleton-shimmer { to { background-position: -200% 0; } }
+.m-skeleton {
+  border-radius: 8px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--m-ink) 7%, var(--m-surface)) 25%,
+    color-mix(in oklab, var(--m-ink) 13%, var(--m-surface)) 50%,
+    color-mix(in oklab, var(--m-ink) 7%, var(--m-surface)) 75%
+  );
+  background-size: 200% 100%;
+  animation: m-skeleton-shimmer 1.3s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) { .m-skeleton { animation: none; } }
+
 /* Color picker (kept for custom color support) */
 .color-picker {
   width: 32px;

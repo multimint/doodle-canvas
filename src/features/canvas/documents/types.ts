@@ -9,6 +9,16 @@ export interface DocumentKind {
   label: string
   width: number
   height: number
-  background: 'dot-grid' | 'plain' | 'lined'
+  // 'image' renders a fixed template artwork (backgroundImage) pinned to the document extent and
+  // scaled with zoom — used by the Daily Planner's "My Day" sheet.
+  background: 'dot-grid' | 'plain' | 'lined' | 'image'
+  // Asset URL for the `image` background (the imported SVG template). Ignored otherwise.
+  backgroundImage?: string
+  // Camera behaviour. 'free' is the normal pan/zoom canvas. 'bounded' starts fit-to-frame, lets the
+  // user zoom in, but clamps pan to the document edges and forbids zooming out past fit — the
+  // Daily Planner's "no infinite" view. Defaults to 'free'.
+  view?: 'free' | 'bounded'
   defaultTool: ToolType
+  // Title a freshly-created document of this kind gets; falls back to 'Untitled Canvas'.
+  defaultTitle?: string
 }

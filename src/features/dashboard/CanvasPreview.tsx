@@ -6,12 +6,12 @@ import type { Stroke } from '../../lib/types'
 import { strokeKind } from '../canvas/tools/registry'
 import { documentKind } from '../canvas/documents/registry'
 
-// Default canvas template dimensions (the dashboard preview predates per-doc sizing).
-const { width: CANVAS_W, height: CANVAS_H } = documentKind()
-
 interface Props {
   canvasId: string
   accentColor?: string
+  // Document-kind id, so the preview uses the right dimensions and draws the kind's template
+  // (e.g. the Daily Planner's "My Day" sheet) behind the strokes.
+  kind?: string
 }
 
 // Static thumbnail render: the same per-kind draw the live canvas uses, with the boil frozen
@@ -24,13 +24,29 @@ function renderStroke(ctx: CanvasRenderingContext2D, stroke: Stroke) {
   ctx.restore()
 }
 
-export function CanvasPreview({ canvasId, accentColor = '#3d5afe' }: Props) {
+export function CanvasPreview({ canvasId, accentColor = '#3d5afe', kind }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [size, setSize] = useState({ w: 0, h: 0 })
   const [strokes, setStrokes] = useState<Stroke[]>([])
   const [loaded, setLoaded] = useState(false)
   const [visible, setVisible] = useState(false)
+  const [template, setTemplate] = useState<HTMLImageElement | null>(null)
+
+  // Per-document dimensions + template come from the document kind (the default kind keeps the
+  // historical 16:9 canvas size, so non-planner previews are unchanged).
+  const dk = documentKind(kind)
+  const CANVAS_W = dk.width
+  const CANVAS_H = dk.height
+
+  // Load the kind's template artwork (e.g. the Daily Planner sheet) once, to draw behind strokes.
+  useEffect(() => {
+    if (dk.background !== 'image' || !dk.backgroundImage) { setTemplate(null); return }
+    const img = new Image()
+    img.onload = () => setTemplate(img)
+    img.src = dk.backgroundImage
+    return () => { img.onload = null }
+  }, [dk.background, dk.backgroundImage])
 
   // Fix 2: rAF gate collapses rapid resize events into one setSize per frame
   useEffect(() => {
@@ -46,7 +62,7 @@ export function CanvasPreview({ canvasId, accentColor = '#3d5afe' }: Props) {
     })
     ro.observe(el)
     return () => { ro.disconnect(); cancelAnimationFrame(rafId) }
-  }, [])
+  }, [CANVAS_W, CANVAS_H])
 
   // Fix 1: defer Firebase fetch until the card enters the viewport
   useEffect(() => {
@@ -86,6 +102,9 @@ export function CanvasPreview({ canvasId, accentColor = '#3d5afe' }: Props) {
     ctx.save()
     ctx.scale(scale, scale)
 
+    // The kind's template sheet sits behind the strokes, in the same world coordinates.
+    if (template) ctx.drawImage(template, 0, 0, CANVAS_W, CANVAS_H)
+
     const markerFirst = [
       ...strokes.filter((s) => s.type === 'marker'),
       ...strokes.filter((s) => s.type !== 'marker'),
@@ -93,12 +112,13 @@ export function CanvasPreview({ canvasId, accentColor = '#3d5afe' }: Props) {
     for (const stroke of markerFirst) renderStroke(ctx, stroke)
 
     ctx.restore()
-  }, [strokes, size, loaded])
+  }, [strokes, size, loaded, template, CANVAS_W, CANVAS_H])
 
-  const isEmpty = loaded && strokes.length === 0
+  // Image-backed kinds (e.g. the Daily Planner) always show their template, so they're never "empty".
+  const isEmpty = loaded && strokes.length === 0 && dk.background !== 'image'
 
   return (
-    <div ref={containerRef} style={{ width: '100%', aspectRatio: '16/9', overflow: 'hidden', background: 'transparent', position: 'relative' }}>
+    <div ref={containerRef} style={{ width: '100%', aspectRatio: `${CANVAS_W} / ${CANVAS_H}`, overflow: 'hidden', background: 'transparent', position: 'relative' }}>
       {size.w > 0 && (
         <canvas ref={canvasRef} width={size.w} height={size.h} style={{ display: 'block', width: '100%', height: '100%' }} />
       )}

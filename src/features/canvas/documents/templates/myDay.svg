@@ -1,0 +1,158 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1396" width="1080" height="1396">
+  <style>
+    .sheet { fill: #fffdf8; }
+    .frame { fill: none; stroke: #20232e; stroke-width: 3; }
+    .frame-soft { fill: none; stroke: #20232e; stroke-width: 2.4; }
+    .ink { fill: #20232e; }
+    .lbl { font-family: 'Trebuchet MS', 'Segoe UI', system-ui, sans-serif; font-weight: 800; fill: #20232e; text-anchor: middle; letter-spacing: 2.5px; }
+    .lbl-sm { font-family: 'Trebuchet MS', 'Segoe UI', system-ui, sans-serif; font-weight: 700; fill: #20232e; text-anchor: middle; letter-spacing: 1.5px; }
+    .num { font-family: 'Trebuchet MS', 'Segoe UI', system-ui, sans-serif; font-weight: 700; fill: #5b6070; text-anchor: middle; }
+    .title { font-family: 'Comic Sans MS', 'Trebuchet MS', 'Segoe UI', system-ui, sans-serif; font-weight: 800; fill: #20232e; }
+    .rule { stroke: #c7ccd6; stroke-width: 1.6; }
+    .ico { fill: none; stroke: #20232e; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+    .ico-fill { fill: #20232e; }
+  </style>
+
+  <!-- sheet -->
+  <rect class="sheet" x="0" y="0" width="1080" height="1396"/>
+
+  <!-- ===================== HEADER ===================== -->
+  <!-- scribble cloud doodle -->
+  <path class="ico" d="M70 110 q-22 -2 -22 -22 q0 -18 20 -20 q2 -22 26 -22 q18 0 24 16 q20 -4 28 12 q16 2 14 20 q-2 16 -22 16 z"/>
+  <path class="ico" d="M150 70 q14 14 0 26 M168 64 q18 16 2 32"/>
+  <!-- title -->
+  <text class="title" x="210" y="118" font-size="92" font-style="italic">My Day</text>
+
+  <!-- weekday letters -->
+  <text class="lbl" x="800" y="62" font-size="30">S  M  T  W  T  F  S</text>
+  <!-- little bird doodles -->
+  <path class="ico" d="M1000 56 q10 -10 20 0 q10 -10 20 0"/>
+  <path class="ico" d="M1006 78 q10 -10 20 0 q10 -10 20 0"/>
+  <!-- date line -->
+  <text class="lbl-sm" x="690" y="126" font-size="30" text-anchor="start">DATE:</text>
+  <line class="frame-soft" x1="800" y1="130" x2="868" y2="130"/>
+  <text class="ink" x="884" y="126" font-size="34" text-anchor="middle">/</text>
+  <line class="frame-soft" x1="900" y1="130" x2="968" y2="130"/>
+  <text class="ink" x="984" y="126" font-size="34" text-anchor="middle">/</text>
+  <line class="frame-soft" x1="1000" y1="130" x2="1040" y2="130"/>
+
+  <!-- ===================== LEFT COLUMN (x 40..360) ===================== -->
+  <!-- MOOD -->
+  <text class="lbl" x="200" y="208" font-size="28">MOOD</text>
+  <rect class="frame" x="40" y="224" width="320" height="120" rx="14"/>
+  <g class="ico">
+    <circle cx="92" cy="284" r="24"/><path d="M84 280 h0 M100 280 h0"/><path d="M82 294 q10 8 20 0"/>
+    <circle cx="146" cy="284" r="24"/><path d="M138 280 h0 M154 280 h0"/><path d="M138 296 h16"/>
+    <circle cx="200" cy="284" r="24"/><path d="M192 280 h0 M208 280 h0"/><path d="M190 292 q10 6 20 0"/>
+    <circle cx="254" cy="284" r="24"/><path d="M246 280 h0 M262 280 h0"/><path d="M246 296 q8 -8 16 0"/>
+    <circle cx="308" cy="284" r="24"/><path d="M300 278 l8 4 M316 278 l-8 4"/><path d="M298 298 q10 -10 20 0"/>
+  </g>
+
+  <!-- SLEEP -->
+  <text class="lbl" x="200" y="392" font-size="28">SLEEP</text>
+  <rect class="frame" x="40" y="408" width="320" height="92" rx="14"/>
+  <g class="ico">
+    <path d="M64 452 q12 -22 24 0"/><path d="M100 452 q12 -22 24 0"/><path d="M136 452 q12 -22 24 0"/>
+    <path d="M172 452 q12 -22 24 0"/><path d="M208 452 q12 -22 24 0"/><path d="M244 452 q12 -22 24 0"/>
+    <path d="M280 452 q12 -22 24 0"/><path d="M316 452 q12 -22 24 0"/>
+  </g>
+  <g class="num" font-size="18">
+    <text x="76" y="488">1h</text><text x="112" y="488">2</text><text x="148" y="488">3</text>
+    <text x="184" y="488">4</text><text x="220" y="488">5</text><text x="256" y="488">6</text>
+    <text x="292" y="488">7</text><text x="328" y="488">8+</text>
+  </g>
+
+  <!-- WEATHER -->
+  <text class="lbl" x="200" y="548" font-size="28">WEATHER</text>
+  <rect class="frame" x="40" y="564" width="320" height="92" rx="14"/>
+  <g class="ico" transform="translate(0,4)">
+    <circle cx="84" cy="610" r="16"/><g stroke-width="2"><path d="M84 586 v-8 M84 642 v8 M60 610 h-8 M116 610 h8 M67 593 l-6 -6 M101 593 l6 -6 M67 627 l-6 6 M101 627 l6 6"/></g>
+    <path d="M150 622 q-22 0 -22 -18 q0 -16 18 -16 q4 -16 22 -12 q14 -10 26 4 q16 -2 16 16 q0 14 -18 14 z" transform="translate(0,-6)"/>
+    <path d="M236 600 q-18 0 -18 -16 q0 -14 16 -14 q4 -12 20 -8 q12 -2 12 14 q14 0 14 14 z"/><g stroke-width="2"><path d="M226 624 l-4 10 M242 624 l-4 10 M258 624 l-4 10"/></g>
+    <path d="M300 588 v44 M286 600 l28 20 M314 600 l-28 20"/>
+  </g>
+
+  <!-- REMINDERS -->
+  <text class="lbl" x="200" y="700" font-size="28">REMINDERS</text>
+  <rect class="frame" x="40" y="716" width="320" height="236" rx="14"/>
+
+  <!-- NOTES -->
+  <ellipse class="frame" cx="120" cy="1000" rx="74" ry="30"/>
+  <text class="lbl-sm" x="120" y="1009" font-size="24">NOTES</text>
+  <rect class="frame" x="40" y="1042" width="320" height="312" rx="14"/>
+
+  <!-- ===================== MIDDLE COLUMN (x 380..700) ===================== -->
+  <!-- TODO -->
+  <text class="lbl" x="540" y="208" font-size="28">TODO</text>
+  <rect class="frame" x="380" y="224" width="320" height="232" rx="14"/>
+
+  <!-- SCHEDULE -->
+  <text class="lbl" x="540" y="500" font-size="28">SCHEDULE</text>
+  <rect class="frame" x="380" y="516" width="320" height="560" rx="14"/>
+  <text class="lbl-sm" x="430" y="556" font-size="22" text-anchor="start">Time</text>
+  <text class="lbl-sm" x="540" y="556" font-size="22" text-anchor="start">Activity</text>
+  <line class="frame-soft" x1="380" y1="572" x2="700" y2="572"/>
+  <line class="frame-soft" x1="512" y1="572" x2="512" y2="1076"/>
+  <g class="rule">
+    <line x1="396" y1="612" x2="684" y2="612"/><line x1="396" y1="652" x2="684" y2="652"/>
+    <line x1="396" y1="692" x2="684" y2="692"/><line x1="396" y1="732" x2="684" y2="732"/>
+    <line x1="396" y1="772" x2="684" y2="772"/><line x1="396" y1="812" x2="684" y2="812"/>
+    <line x1="396" y1="852" x2="684" y2="852"/><line x1="396" y1="892" x2="684" y2="892"/>
+    <line x1="396" y1="932" x2="684" y2="932"/><line x1="396" y1="972" x2="684" y2="972"/>
+    <line x1="396" y1="1012" x2="684" y2="1012"/><line x1="396" y1="1052" x2="684" y2="1052"/>
+  </g>
+
+  <!-- GOALS -->
+  <text class="lbl" x="540" y="1124" font-size="28">GOALS</text>
+  <rect class="frame" x="380" y="1140" width="320" height="120" rx="14"/>
+  <g class="rule">
+    <circle class="ico-fill" cx="404" cy="1174" r="4"/><line x1="424" y1="1178" x2="676" y2="1178"/>
+    <circle class="ico-fill" cx="404" cy="1210" r="4"/><line x1="424" y1="1214" x2="676" y2="1214"/>
+    <circle class="ico-fill" cx="404" cy="1246" r="4"/><line x1="424" y1="1250" x2="676" y2="1250"/>
+  </g>
+
+  <!-- grateful -->
+  <text class="lbl-sm" x="540" y="1300" font-size="24" font-style="italic">I'm grateful for...</text>
+  <rect class="frame" x="380" y="1314" width="320" height="62" rx="14"/>
+
+  <!-- ===================== RIGHT COLUMN (x 720..1040) ===================== -->
+  <!-- BREAKFAST -->
+  <text class="lbl" x="880" y="208" font-size="28">BREAKFAST</text>
+  <rect class="frame" x="720" y="224" width="320" height="150" rx="14"/>
+
+  <!-- LUNCH -->
+  <text class="lbl" x="880" y="418" font-size="28">LUNCH</text>
+  <rect class="frame" x="720" y="434" width="320" height="150" rx="14"/>
+
+  <!-- DINNER -->
+  <text class="lbl" x="880" y="628" font-size="28">DINNER</text>
+  <rect class="frame" x="720" y="644" width="320" height="150" rx="14"/>
+
+  <!-- WATER -->
+  <text class="lbl" x="880" y="838" font-size="28">WATER</text>
+  <rect class="frame" x="720" y="854" width="320" height="150" rx="14"/>
+  <g class="ico">
+    <path d="M772 892 q18 22 0 40 q-18 -18 0 -40z"/><path d="M824 892 q18 22 0 40 q-18 -18 0 -40z"/>
+    <path d="M876 892 q18 22 0 40 q-18 -18 0 -40z"/><path d="M928 892 q18 22 0 40 q-18 -18 0 -40z"/>
+    <path d="M980 892 q18 22 0 40 q-18 -18 0 -40z"/>
+    <path d="M772 952 q18 22 0 40 q-18 -18 0 -40z"/><path d="M824 952 q18 22 0 40 q-18 -18 0 -40z"/>
+    <path d="M876 952 q18 22 0 40 q-18 -18 0 -40z"/><path d="M928 952 q18 22 0 40 q-18 -18 0 -40z"/>
+    <path d="M980 952 q18 22 0 40 q-18 -18 0 -40z"/>
+  </g>
+
+  <!-- EXERCISE -->
+  <text class="lbl" x="880" y="1048" font-size="28">EXERCISE</text>
+  <rect class="frame" x="720" y="1064" width="320" height="312" rx="14"/>
+  <g class="lbl-sm" font-size="20">
+    <text x="772" y="1104" text-anchor="start">Cardio</text>
+    <text x="880" y="1104">Strength</text>
+    <text x="988" y="1104" text-anchor="end">Other</text>
+  </g>
+  <line class="frame-soft" x1="736" y1="1122" x2="1024" y2="1122"/>
+  <text class="lbl-sm" x="880" y="1162" font-size="24" font-style="italic">I feel...</text>
+  <g class="rule">
+    <line x1="736" y1="1200" x2="1024" y2="1200"/><line x1="736" y1="1240" x2="1024" y2="1240"/>
+    <line x1="736" y1="1280" x2="1024" y2="1280"/><line x1="736" y1="1320" x2="1024" y2="1320"/>
+    <line x1="736" y1="1360" x2="1024" y2="1360"/>
+  </g>
+</svg>

@@ -27,7 +27,15 @@ export function Dashboard() {
   const uid = user!.uid;
   const { owned, shared, loading } = useCanvasList(uid);
   const { creating, creatingId, createCanvas } = useCreateCanvas(uid);
-  const [activeNav, setActiveNav] = useState<NavKey>('home');
+  // Remember the active tab across navigation (e.g. opening a canvas and coming back) so the user
+  // returns to the tab they left from rather than always landing on Home. Scoped to the tab session.
+  const [activeNav, setActiveNav] = useState<NavKey>(() => {
+    const saved = sessionStorage.getItem('dashboardNav') as NavKey | null;
+    return saved && ['home', 'documents', 'planner', 'shared'].includes(saved) ? saved : 'home';
+  });
+  useEffect(() => {
+    sessionStorage.setItem('dashboardNav', activeNav);
+  }, [activeNav]);
   const [searchQuery, setSearchQuery] = useState('');
   const [modal, setModal] = useState<ModalConfig | null>(null);
   const isMobile = useIsMobile();

@@ -11,4 +11,17 @@ describe('document-kind registry', () => {
     expect(documentKind(undefined).id).toBe(DEFAULT_DOCUMENT_KIND)
     expect(documentKind('does-not-exist').id).toBe(DEFAULT_DOCUMENT_KIND)
   })
+
+  it('ships the daily-planner kind as a bounded, image-backed portrait sheet', () => {
+    const planner = documentKind('daily-planner')
+    expect(planner.id).toBe('daily-planner')
+    expect(planner.view).toBe('bounded')
+    expect(planner.background).toBe('image')
+    expect(planner.backgroundImage).toBeTruthy()
+    // Portrait, sized to the template's printed proportions.
+    expect(planner.height).toBeGreaterThan(planner.width)
+    expect(planner.width).toBe(1080)
+    expect(planner.height).toBe(1396)
+    expect(planner.defaultTitle).toBe('My Day')
+  })
 })

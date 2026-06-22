@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { doc, onSnapshot, updateDoc, deleteField } from 'firebase/firestore'
 import { ref, get, set } from 'firebase/database'
 import { linkWithPopup, signInWithPopup, GoogleAuthProvider } from 'firebase/auth'
@@ -31,6 +31,15 @@ import { documentKind } from './documents/registry'
 export function CanvasPage() {
   const { canvasId } = useParams<{ canvasId: string }>()
   const navigate = useNavigate()
+  const location = useLocation()
+
+  // Back goes to wherever the user came from (the dashboard tab they opened the canvas from, or a
+  // previous canvas), not always Home. `location.key === 'default'` means there is no in-app history
+  // to pop — e.g. the canvas was opened via a deep link or a page refresh — so fall back to Home.
+  const goBack = useCallback(() => {
+    if (location.key !== 'default') navigate(-1)
+    else navigate('/')
+  }, [location.key, navigate])
   const { user } = useAuth()
   const uid = user!.uid
   const userColor = pickUserColor(uid)
@@ -215,6 +224,10 @@ export function CanvasPage() {
   // features/canvas/documents) rather than being hardcoded, so a new template can change it.
   const docKind = documentKind(canvasDoc.kind)
   const surfaceClass = docKind.background === 'dot-grid' ? 'm-canvas-surface' : ''
+  // A bounded, image-backed kind (the Daily Planner) renders its template pinned to the document
+  // extent and clamps the camera to the sheet (see documents/registry, ADR 0004).
+  const isBounded = docKind.view === 'bounded'
+  const hasTemplate = docKind.background === 'image' && !!docKind.backgroundImage
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', overflow: 'hidden', background: 'var(--m-bg)' }}>
@@ -229,7 +242,7 @@ export function CanvasPage() {
         onTitleEditCancel={() => setEditingTitle(false)}
         presenceEntries={presenceEntries}
         uid={uid}
-        onBack={() => navigate('/')}
+        onBack={goBack}
         onUndo={handleUndo}
         onRedo={handleRedo}
         onShare={() => setShowInvite(true)}
@@ -308,12 +321,35 @@ export function CanvasPage() {
           }}
           className={surfaceClass}
         >
+          {/* Template sheet (Daily Planner): pinned to the document extent in world space, so it
+              scales with zoom and pans with the camera — it *is* the sheet, behind the strokes. */}
+          {hasTemplate && (
+            <img
+              src={docKind.backgroundImage}
+              alt=""
+              aria-hidden
+              draggable={false}
+              style={{
+                position: 'absolute',
+                left: viewport.pan.x,
+                top: viewport.pan.y,
+                width: docKind.width * viewport.zoom,
+                height: docKind.height * viewport.zoom,
+                pointerEvents: 'none',
+                userSelect: 'none',
+                zIndex: 0,
+              }}
+            />
+          )}
           <CanvasStage
             strokes={strokes}
             tool={tool}
             color={color}
             strokeWidth={effectiveStrokeWidth}
             disabled={atCap}
+            boundedView={isBounded}
+            worldWidth={docKind.width}
+            worldHeight={docKind.height}
             onStrokeComplete={handleStrokeComplete}
             onMouseMove={emitCursor}
             onMouseLeave={clearCursor}
@@ -337,7 +373,10 @@ export function CanvasPage() {
           {!isMobile && (
             <>
               <ZoomControls navHandle={navRef} viewport={viewport} minimapHandle={minimapHandle} />
-              <Minimap navHandle={navRef} viewport={viewport} strokes={strokes} minimapHandle={minimapHandle} />
+              {/* The bounded sheet always shows in full, so a minimap is redundant. */}
+              {!isBounded && (
+                <Minimap navHandle={navRef} viewport={viewport} strokes={strokes} minimapHandle={minimapHandle} />
+              )}
             </>
           )}
         </div>

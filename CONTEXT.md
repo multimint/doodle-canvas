@@ -1,7 +1,7 @@
 # Doodle Canvas — Domain Glossary
 
 ## Canvas
-A fixed-size (1920×1080) drawing surface owned by a single **User**. A Canvas has a list of **Members** who may draw on it. A User may own at most 10 Canvases.
+A fixed-size drawing surface owned by a single **User**. Its size and background come from its **Document Kind** (template) — the default kind is a 1920×1080 dot-grid surface; the **Daily Planner** is another kind. A Canvas has pan and zoom, so it can feel boundless, but it is not infinite — the surface is fixed. A Canvas has a list of **Members** who may draw on it. A User may own at most 10 Canvases, of any kind.
 
 ## Stroke
 A single drawing action recorded on a Canvas. A Stroke has a `type` (path, marker, rect, circle, line, text, sticker, eraser) and carries its shape geometry/style as its `data`, drawn through the stroke-kind registry onto an HTML5 Canvas 2D context (the renderer; not Konva). A Stroke has exactly one **Author** (the User who created it). Any Member may delete any Stroke. Strokes are immutable once created, with one exception: the **Text Box**.
@@ -11,6 +11,12 @@ A `text`-type Stroke that holds editable, wrapping text within a fixed **width**
 
 ## Day Doodle
 A small, personal drawing pinned to a single calendar date in the **Planner**, drawn within a fixed 120×90 frame. There is at most one Day Doodle per (User, date). Unlike a **Canvas** it is private (non-collaborative — no Members, no Presence), does not count against the User's 10-Canvas limit, and is not opened as a full canvas document; it is drawn in a modal and shown back on its calendar card as a thumbnail. It reuses the same **Stroke** model and drawing surface as a Canvas, but its strokes are stored inline in one Firestore document under the owner (see ADR 0003) rather than in the realtime database.
+
+## Daily Planner
+A **Canvas** created from the "My Day" template: a portrait sheet pre-printed with fixed sections (mood, sleep, weather, schedule, meals, water, exercise, etc.) drawn as a non-drawable background that scales with the sheet. It is a full Canvas in every other respect — it lives among the User's Canvases, appears in the document lists, counts against the 10-Canvas limit, is shareable, and reuses the **Stroke** model and tools. It differs from a plain Canvas only in (a) its template background and (b) a **bounded camera**: a Member may zoom into the sheet, but panning is clamped to the sheet's edges so there is no empty surround. Distinct from a **Day Doodle**, which is a tiny private drawing and not a Canvas. Stroke and text sizes match a regular Canvas because the sheet is authored at the same world scale.
+
+## Linked Document
+A per-**User** association between a calendar date in the **Planner** and a **Canvas** (of any kind, including a **Daily Planner**). A date may hold many Linked Documents, and the same Canvas may be linked to more than one date. Linking and unlinking are personal and never alter the Canvas itself — unlinking removes the association only, and a separate, owner-only delete removes the Canvas. Because links are per-User, a **shared** Canvas can be linked to a date by each Member independently. A link whose Canvas has been deleted is shown as **unavailable** until removed. Distinct from a **Day Doodle**, which is drawn directly on the calendar card rather than linked.
 
 ## Select Mode
 The idle interaction state in which no drawing tool is active. It is the only mode where **Text Boxes** are interactive (move / re-edit / delete). It is entered by clicking the active tool again to deselect it, and automatically after a Text Box is created. Dragging empty canvas in Select Mode does nothing.

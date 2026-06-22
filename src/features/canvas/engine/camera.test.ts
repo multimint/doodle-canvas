@@ -7,6 +7,8 @@ import {
   zoomToward,
   fitCamera,
   fitFixedFrame,
+  fitZoom,
+  clampPan,
   MIN_ZOOM,
   MAX_ZOOM,
   CANVAS_WIDTH,
@@ -103,5 +105,47 @@ describe('fitFixedFrame', () => {
     expect(tl.y).toBeGreaterThanOrEqual(-0.001)
     expect(br.x).toBeLessThanOrEqual(400.001)
     expect(br.y).toBeLessThanOrEqual(300.001)
+  })
+})
+
+describe('fitZoom', () => {
+  it('returns the limiting-axis ratio (no 1:1 ceiling)', () => {
+    expect(fitZoom(480, 360, 120, 90)).toBeCloseTo(4) // both axes 4 → 4
+    expect(fitZoom(360, 360, 120, 90)).toBeCloseTo(3) // width limits (3 vs 4) → 3
+  })
+})
+
+describe('clampPan', () => {
+  // A portrait sheet (200×400) bounded into a 200×300 viewport at fit zoom.
+  const fw = 200
+  const fh = 400
+  const w = 200
+  const h = 300
+  const fz = fitZoom(w, h, fw, fh) // 0.75 (height limits)
+
+  it('centres the frame on an axis where it is smaller than the viewport', () => {
+    // At fit zoom width = 200*0.75 = 150 < 200 → centred horizontally; height = 300 = viewport.
+    const c = clampPan({ panX: 999, panY: -999, zoom: fz }, w, h, fw, fh)
+    expect(c.panX).toBeCloseTo((w - fw * fz) / 2)
+    expect(c.panY).toBeCloseTo(0) // height fills exactly → only valid pan is 0
+  })
+
+  it('clamps pan so a zoomed-in frame never reveals empty space past its edges', () => {
+    const zoom = 2 // sheet now 400×800, both larger than the 200×300 viewport
+    // Panning hard positive (toward revealing the top-left gap) is clamped to 0.
+    const tooFarTL = clampPan({ panX: 50, panY: 80, zoom }, w, h, fw, fh)
+    expect(tooFarTL.panX).toBeCloseTo(0)
+    expect(tooFarTL.panY).toBeCloseTo(0)
+    // Panning hard negative is clamped so the bottom-right edge stops at the viewport border.
+    const tooFarBR = clampPan({ panX: -9999, panY: -9999, zoom }, w, h, fw, fh)
+    expect(tooFarBR.panX).toBeCloseTo(w - fw * zoom) // -200
+    expect(tooFarBR.panY).toBeCloseTo(h - fh * zoom) // -500
+  })
+
+  it('leaves an in-range pan untouched', () => {
+    const zoom = 2
+    const c = clampPan({ panX: -100, panY: -200, zoom }, w, h, fw, fh)
+    expect(c.panX).toBeCloseTo(-100)
+    expect(c.panY).toBeCloseTo(-200)
   })
 })

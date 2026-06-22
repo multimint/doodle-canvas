@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import type { CanvasDoc } from '../../lib/types'
-import { MCOLORS } from '../../lib/icons'
+import { Icon, MCOLORS } from '../../lib/icons'
 import { CanvasPreview } from './CanvasPreview'
 
 interface Props {
@@ -44,11 +44,16 @@ export function CanvasListRow({ canvas, isOwner, uid }: Props) {
         background: 'radial-gradient(rgba(45,39,34,.07) 1.1px, transparent 1.2px) -1px -1px / 13px 13px, #fffdf8',
         boxShadow: 'inset 0 0 0 1px rgba(20,23,45,.04)',
       }}>
-        <CanvasPreview canvasId={canvas.id} accentColor={pickColor(canvas.id)} />
+        <CanvasPreview canvasId={canvas.id} accentColor={pickColor(canvas.id)} kind={canvas.kind} />
       </div>
       <div className="m-col m-grow" style={{ gap: 3, minWidth: 0 }}>
-        <div className="m-bold" style={{ fontSize: 14.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {canvas.title}
+        <div className="m-row m-g4" style={{ alignItems: 'center', minWidth: 0 }}>
+          {canvas.kind === 'daily-planner' && (
+            <Icon name="calendar" size={13} style={{ flexShrink: 0, color: 'var(--m-ink-3)' }} />
+          )}
+          <div className="m-bold" style={{ fontSize: 14.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {canvas.title}
+          </div>
         </div>
         <div className="m-tiny m-faint" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {formattedDate}

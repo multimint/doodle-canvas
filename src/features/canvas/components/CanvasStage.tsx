@@ -92,6 +92,10 @@ interface Props {
   // Fixed-frame mode (Day Doodle modal): lock the view to a small world frame that fills the
   // container, with no pan/zoom. worldWidth/worldHeight give the frame extent.
   lockView?: boolean
+  // Bounded mode (Daily Planner): start fit-to-frame, allow zoom in, but clamp pan to the frame
+  // edges and forbid zooming out past fit. worldWidth/worldHeight give the frame extent. Mutually
+  // exclusive with lockView.
+  boundedView?: boolean
   worldWidth?: number
   worldHeight?: number
   // Open with an empty text box already in edit mode (Day Doodle's fresh-card flow), so the user
@@ -156,6 +160,7 @@ export function CanvasStage({
   friendCursors,
   onSelectionChange,
   lockView = false,
+  boundedView = false,
   worldWidth,
   worldHeight,
   initialTextBox,
@@ -246,6 +251,10 @@ export function CanvasStage({
     onPinchStart: cancelStroke,
     fixedFrame:
       lockView && worldWidth && worldHeight
+        ? { width: worldWidth, height: worldHeight }
+        : undefined,
+    boundedFrame:
+      boundedView && worldWidth && worldHeight
         ? { width: worldWidth, height: worldHeight }
         : undefined,
   })

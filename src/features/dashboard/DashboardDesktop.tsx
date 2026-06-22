@@ -119,7 +119,7 @@ export function DashboardDesktop(props: DashboardViewProps) {
             {activeNav === 'home' && <HomePage {...pageProps} />}
             {activeNav === 'documents' && <DocumentsPage {...pageProps} />}
             {activeNav === 'shared' && <SharedPage {...pageProps} />}
-            {activeNav === 'planner' && <PlannerPage mobile={false} uid={pageProps.uid} />}
+            {activeNav === 'planner' && <PlannerPage mobile={false} uid={pageProps.uid} owned={pageProps.owned} />}
           </div>
         )}
       </div>
