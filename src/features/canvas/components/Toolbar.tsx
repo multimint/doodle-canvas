@@ -22,6 +22,9 @@ interface Props {
   onStickerChange: (id: string) => void;
   onClear: () => void;
   horizontal?: boolean;
+  // Show the Hand/pan tool. On by default (the main canvas wants drag-to-pan on touch); the
+  // Day Doodle modal sets this false because its locked, fit-to-frame view forbids panning.
+  showHand?: boolean;
   // Override the draw-tools row (e.g. the Day Doodle modal drops the shape tools). Defaults to
   // the full registry row.
   drawTools?: ToolDescriptor[];
@@ -117,6 +120,7 @@ export function Toolbar({
   onStickerChange,
   onClear,
   horizontal = false,
+  showHand = true,
   drawTools = DRAW_TOOLS,
   noScroll = false,
 }: Props) {
@@ -328,6 +332,21 @@ export function Toolbar({
           }}
         />
 
+        {/* Hand / pan tool — lets touch users drag to pan with one finger. */}
+        {showHand && (
+          <button
+            title='Hand'
+            onClick={() => {
+              onToolChange(tool === 'hand' ? 'select' : 'hand');
+              setShowPicker(false);
+            }}
+            className={'m-tool ' + (tool === 'hand' ? 'm-tool-on' : '')}
+            style={{ flexShrink: 0, width: 40, height: 40 }}
+          >
+            <Icon name='hand' size={19} />
+          </button>
+        )}
+
         {/* Draw tools */}
         {drawTools.map(({ id, icon, label }) => (
           <div key={id} style={{ position: 'relative', flexShrink: 0 }}>
@@ -423,26 +442,30 @@ export function Toolbar({
       }}
     >
       {/* Hand / pan tool */}
-      <button
-        title='Hand (Space)'
-        onClick={() => {
-          onToolChange(tool === 'hand' ? 'select' : 'hand');
-          setShowPicker(false);
-        }}
-        className={'m-tool ' + (tool === 'hand' ? 'm-tool-on' : '')}
-      >
-        <Icon name='hand' size={20} />
-      </button>
+      {showHand && (
+        <>
+          <button
+            title='Hand (Space)'
+            onClick={() => {
+              onToolChange(tool === 'hand' ? 'select' : 'hand');
+              setShowPicker(false);
+            }}
+            className={'m-tool ' + (tool === 'hand' ? 'm-tool-on' : '')}
+          >
+            <Icon name='hand' size={20} />
+          </button>
 
-      <div
-        style={{
-          width: 30,
-          height: 1,
-          background: 'var(--m-line)',
-          margin: '2px 0',
-          flexShrink: 0,
-        }}
-      />
+          <div
+            style={{
+              width: 30,
+              height: 1,
+              background: 'var(--m-line)',
+              margin: '2px 0',
+              flexShrink: 0,
+            }}
+          />
+        </>
+      )}
 
       {drawTools.map(({ id, icon, label }) => (
         <div key={id} style={{ position: 'relative' }}>

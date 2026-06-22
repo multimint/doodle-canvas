@@ -272,6 +272,7 @@ export function DayDoodleModal({ uid, date, isoDate, onClose }: Props) {
             onStickerChange={setSelectedSticker}
             onClear={handleClear}
             drawTools={DOODLE_TOOLS}
+            showHand={false}
             horizontal
             noScroll
           />

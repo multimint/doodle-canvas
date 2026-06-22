@@ -9,11 +9,14 @@ interface Props {
   navHandle: React.MutableRefObject<NavHandle | null>
   viewport: { zoom: number; pan: { x: number; y: number } }
   minimapHandle?: React.MutableRefObject<MinimapHandle | null>
+  // On mobile there is no minimap, so sit just above the bottom toolbar instead of stacking
+  // above the (absent) minimap.
+  mobile?: boolean
 }
 
 // Zoom in/out/reset buttons + percentage. Drives the camera through the NavHandle (stepZoom /
 // resetView) instead of reading a Konva stage, so it carries no rendering-backend dependency.
-export function ZoomControls({ navHandle, viewport, minimapHandle }: Props) {
+export function ZoomControls({ navHandle, viewport, minimapHandle, mobile = false }: Props) {
   const step = (dir: 1 | -1) => navHandle.current?.stepZoom(dir)
   const reset = () => {
     navHandle.current?.resetView()
@@ -54,8 +57,8 @@ export function ZoomControls({ navHandle, viewport, minimapHandle }: Props) {
     <div
       style={{
         position: 'absolute',
-        bottom: 20 + MM_H + 8,
-        right: 20,
+        bottom: mobile ? 16 : 20 + MM_H + 8,
+        right: mobile ? 16 : 20,
         height: H,
         display: 'flex',
         alignItems: 'stretch',

@@ -22,6 +22,7 @@ import { CursorOverlay } from './components/CursorOverlay'
 import { Minimap } from './components/Minimap'
 import type { MinimapHandle } from './components/Minimap'
 import { ZoomControls } from './components/ZoomControls'
+import { useIsMobile } from '../dashboard/useIsMobile'
 import { InviteModal } from '../sharing/InviteModal'
 import { ConfirmModal } from '../../lib/ConfirmModal'
 import { pickUserColor, STROKE_CAP } from '../../lib/types'
@@ -58,12 +59,9 @@ export function CanvasPage() {
   const minimapHandle = useRef<MinimapHandle | null>(null)
   const toolRef = useRef<ToolType>('pen')
 
-  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 640)
-  useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 640)
-    window.addEventListener('resize', check)
-    return () => window.removeEventListener('resize', check)
-  }, [])
+  // Share the dashboard's mobile breakpoint (760px) so the canvas and dashboard agree on layout —
+  // no more 640–760 band where the dashboard is mobile but the canvas is still desktop.
+  const isMobile = useIsMobile()
 
   const [tool, setTool] = useState<ToolType>('pen')
   const [color, setColor] = useState('#14151c')
@@ -370,14 +368,12 @@ export function CanvasPage() {
             friendCursors={cursors}
             onSelectionChange={updateSelection}
           />
-          {!isMobile && (
-            <>
-              <ZoomControls navHandle={navRef} viewport={viewport} minimapHandle={minimapHandle} />
-              {/* The bounded sheet always shows in full, so a minimap is redundant. */}
-              {!isBounded && (
-                <Minimap navHandle={navRef} viewport={viewport} strokes={strokes} minimapHandle={minimapHandle} />
-              )}
-            </>
+          {/* Zoom/fit controls show on every viewport (mobile keeps a compact reset/fit affordance);
+              the minimap is a desktop-only hover/drag aid, redundant with pinch on touch. */}
+          <ZoomControls navHandle={navRef} viewport={viewport} minimapHandle={minimapHandle} mobile={isMobile} />
+          {!isMobile && !isBounded && (
+            // The bounded sheet always shows in full, so a minimap is redundant.
+            <Minimap navHandle={navRef} viewport={viewport} strokes={strokes} minimapHandle={minimapHandle} />
           )}
         </div>
 
