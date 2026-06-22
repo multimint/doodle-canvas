@@ -2,16 +2,9 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { linkWithPopup, signInWithPopup, GoogleAuthProvider } from 'firebase/auth'
 import { auth } from '../../lib/firebase'
-import { subscribeCanvas, setCanvasTitle, cancelCanvasDeletion } from '../../data/canvases'
-import { grantMemberAccess, ensureOwnerAccess } from '../../data/access'
+import { setCanvasTitle, cancelCanvasDeletion } from '../../data/canvases'
 import { useAuth } from '../auth/useAuth'
-import { useStrokes } from './hooks/useStrokes'
-import { useCursors } from './hooks/useCursors'
-import { useTextPresence } from './hooks/useTextPresence'
-import { usePresence } from './hooks/usePresence'
-import { useUndoStack } from './hooks/useUndoStack'
-import { useLiveStrokes } from './hooks/useLiveStrokes'
-import type { LiveStroke } from './hooks/useLiveStrokes'
+import { useCanvasSession } from './hooks/useCanvasSession'
 import { CanvasStage } from './components/CanvasStage'
 import { stepStrokeWidth, effectiveStrokeWidth as computeEffectiveStrokeWidth } from './utils/strokeSize'
 import type { NavHandle } from './hooks/useCamera'
@@ -26,7 +19,7 @@ import { useIsMobile } from '../dashboard/useIsMobile'
 import { InviteModal } from '../sharing/InviteModal'
 import { ConfirmModal } from '../../lib/ConfirmModal'
 import { pickUserColor, STROKE_CAP } from '../../lib/types'
-import type { CanvasDoc, Stroke, ToolType } from '../../lib/types'
+import type { ToolType } from '../../lib/types'
 import { documentKind } from './documents/registry'
 
 export function CanvasPage() {
@@ -45,8 +38,6 @@ export function CanvasPage() {
   const uid = user!.uid
   const userColor = pickUserColor(uid)
 
-  const [canvasDoc, setCanvasDoc] = useState<CanvasDoc | null>(null)
-  const [loadingDoc, setLoadingDoc] = useState(true)
   const [showInvite, setShowInvite] = useState(false)
   const [viewport, setViewport] = useState({ zoom: 1, pan: { x: 0, y: 0 } })
   const [editingTitle, setEditingTitle] = useState(false)
@@ -73,40 +64,12 @@ export function CanvasPage() {
 
   useEffect(() => { toolRef.current = tool }, [tool])
 
-  useEffect(() => {
-    if (!canvasId) return
-    return subscribeCanvas(canvasId, {
-      onDoc: (data) => {
-        if (data.ownerId !== uid && !data.members.includes(uid)) { navigate('/'); return }
-        setCanvasDoc(data)
-        setLoadingDoc(false)
-      },
-      onGone: () => navigate('/'),
-    })
-  }, [canvasId, uid, navigate])
-
-  useEffect(() => {
-    if (!canvasId) return
-    grantMemberAccess(canvasId, uid).catch(console.error)
-  }, [canvasId, uid])
-
-  useEffect(() => {
-    if (!canvasId || !canvasDoc || canvasDoc.ownerId !== uid) return
-    ensureOwnerAccess(canvasId, uid).catch(console.error)
-  }, [canvasId, canvasDoc?.ownerId, uid])
-
-  const { strokes, atCap, addStroke, updateStroke, deleteStroke, clearAllStrokes } = useStrokes(canvasId!)
-  const { cursors, emitCursor, updateSelection, clearCursor } = useCursors(canvasId!, uid, userColor, tool, effectiveStrokeWidth)
-  const { remoteFocus: remoteTextFocus, setTextFocus } = useTextPresence(canvasId!, uid, userColor)
-  const { remoteStrokes, emitLiveStroke, clearLiveStroke } = useLiveStrokes(canvasId!, uid)
-  const { presence } = usePresence({
-    canvasId: canvasId!,
-    uid,
-    displayName: user!.displayName ?? 'Anonymous',
-    photoURL: user!.photoURL ?? '',
-    color: userColor,
-  })
-  const { push, pop: popUndo, pushRedo, popRedo } = useUndoStack()
+  const {
+    canvasDoc, loadingDoc, strokes, atCap, updateStroke, clearAllStrokes,
+    cursors, emitCursor, updateSelection, clearCursor,
+    remoteTextFocus, setTextFocus, remoteStrokes, presence,
+    handleStrokeComplete, handleUndo, handleRedo, handleDeleteStroke, handleLiveUpdate,
+  } = useCanvasSession({ canvasId: canvasId!, uid, user: user!, userColor, tool, effectiveStrokeWidth })
 
   const handleTitleSave = useCallback(async () => {
     const trimmed = titleDraft.trim()
@@ -148,34 +111,6 @@ export function CanvasPage() {
     setStrokeWidth((w) => stepStrokeWidth(w, dir))
   }, [])
 
-  const handleStrokeComplete = useCallback(async (stroke: Omit<Stroke, 'id'>) => {
-    if (atCap) return
-    const strokeId = await addStroke({ ...stroke, authorId: uid })
-    push(strokeId)
-  }, [atCap, uid, addStroke, push])
-
-  const handleUndo = useCallback(async () => {
-    const strokeId = popUndo()
-    if (!strokeId) return
-    const stroke = strokes.find(s => s.id === strokeId)
-    if (stroke) {
-      const { id: _id, ...strokeData } = stroke
-      pushRedo(strokeData)
-    }
-    try { await deleteStroke(strokeId) } catch { /* already deleted */ }
-  }, [popUndo, deleteStroke, strokes, pushRedo])
-
-  const handleRedo = useCallback(async () => {
-    const stroke = popRedo()
-    if (!stroke) return
-    const strokeId = await addStroke(stroke)
-    push(strokeId)
-  }, [popRedo, addStroke, push])
-
-  const handleDeleteStroke = useCallback(async (strokeId: string) => {
-    await deleteStroke(strokeId)
-  }, [deleteStroke])
-
   const handleClearCanvas = useCallback(() => {
     setModal({
       title: 'Clear canvas?',
@@ -192,10 +127,6 @@ export function CanvasPage() {
   const handleViewportChange = useCallback((zoom: number, pan: { x: number; y: number }) => {
     setViewport({ zoom, pan })
   }, [])
-
-  const handleLiveUpdate = useCallback((data: LiveStroke | null) => {
-    if (data) emitLiveStroke(data); else clearLiveStroke()
-  }, [emitLiveStroke, clearLiveStroke])
 
   useCanvasKeyboard({ toolRef, setTool, onUndo: handleUndo, onRedo: handleRedo })
 
