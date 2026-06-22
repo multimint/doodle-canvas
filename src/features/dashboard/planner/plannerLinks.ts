@@ -8,8 +8,28 @@ import {
   setDoc,
   where,
 } from 'firebase/firestore'
+import { z } from 'zod'
 import { db } from '../../../lib/firebase'
+import { parseOrNull } from '../../../lib/schemas'
+import { getCanvasOnce } from '../../../data/canvases'
 import type { CanvasDoc } from '../../../lib/types'
+
+const PlannerLinkSchema = z.object({
+  canvasId: z.string(),
+  title: z.string(),
+  kind: z.string(),
+})
+
+// Validate the inline `links` array from a plannerDays doc, dropping malformed entries.
+function parseLinks(raw: unknown, context: string): PlannerLink[] {
+  if (!Array.isArray(raw)) return []
+  const out: PlannerLink[] = []
+  for (const item of raw) {
+    const parsed = parseOrNull(PlannerLinkSchema, item, context)
+    if (parsed) out.push(parsed)
+  }
+  return out
+}
 
 // A Linked Document is a per-user association between a calendar date in the Planner and a Canvas
 // (of any kind, including a Daily Planner) — see CONTEXT.md, ADR 0004. Links live under the user's
@@ -38,7 +58,7 @@ function plannerDaysCol(uid: string) {
 export async function loadDayLinks(uid: string, iso: string): Promise<PlannerLink[]> {
   const snap = await getDoc(doc(plannerDaysCol(uid), iso))
   if (!snap.exists()) return []
-  return (snap.data() as PlannerDayDoc).links ?? []
+  return parseLinks(snap.data().links, `plannerDay ${iso}`)
 }
 
 // The set of dates in [startIso, endIso] that have at least one linked document — one query per
@@ -52,7 +72,7 @@ export async function loadDayLinksRange(
   const snap = await getDocs(q)
   const marked = new Set<string>()
   snap.forEach((d) => {
-    if (((d.data() as PlannerDayDoc).links?.length ?? 0) > 0) marked.add(d.id)
+    if (parseLinks(d.data().links, `plannerDay ${d.id}`).length > 0) marked.add(d.id)
   })
   return marked
 }
@@ -89,16 +109,6 @@ export interface ResolvedLink {
 // Fetch each linked canvas to detect deletions. One getDoc per link (a day holds only a handful).
 export async function resolveLinks(links: PlannerLink[]): Promise<ResolvedLink[]> {
   return Promise.all(
-    links.map(async (link) => {
-      try {
-        const snap = await getDoc(doc(db, 'canvases', link.canvasId))
-        return {
-          link,
-          canvas: snap.exists() ? ({ id: snap.id, ...snap.data() } as CanvasDoc) : null,
-        }
-      } catch {
-        return { link, canvas: null }
-      }
-    }),
+    links.map(async (link) => ({ link, canvas: await getCanvasOnce(link.canvasId) })),
   )
 }

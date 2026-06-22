@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
-import { doc, onSnapshot, updateDoc, deleteField } from 'firebase/firestore'
 import { ref, get, set } from 'firebase/database'
 import { linkWithPopup, signInWithPopup, GoogleAuthProvider } from 'firebase/auth'
-import { auth, db, rtdb } from '../../lib/firebase'
+import { auth, rtdb } from '../../lib/firebase'
+import { subscribeCanvas, setCanvasTitle, cancelCanvasDeletion } from '../../data/canvases'
 import { useAuth } from '../auth/useAuth'
 import { useStrokes } from './hooks/useStrokes'
 import { useCursors } from './hooks/useCursors'
@@ -80,14 +80,14 @@ export function CanvasPage() {
 
   useEffect(() => {
     if (!canvasId) return
-    const unsub = onSnapshot(doc(db, 'canvases', canvasId), (snap) => {
-      if (!snap.exists()) { navigate('/'); return }
-      const data = { id: snap.id, ...snap.data() } as CanvasDoc
-      if (data.ownerId !== uid && !data.members.includes(uid)) { navigate('/'); return }
-      setCanvasDoc(data)
-      setLoadingDoc(false)
-    }, () => navigate('/'))
-    return unsub
+    return subscribeCanvas(canvasId, {
+      onDoc: (data) => {
+        if (data.ownerId !== uid && !data.members.includes(uid)) { navigate('/'); return }
+        setCanvasDoc(data)
+        setLoadingDoc(false)
+      },
+      onGone: () => navigate('/'),
+    })
   }, [canvasId, uid, navigate])
 
   useEffect(() => {
@@ -119,7 +119,7 @@ export function CanvasPage() {
     setEditingTitle(false)
     if (!trimmed || trimmed === canvasDoc?.title) return
     try {
-      await updateDoc(doc(db, 'canvases', canvasId!), { title: trimmed })
+      await setCanvasTitle(canvasId!, trimmed)
     } catch (err) {
       console.error('Failed to rename canvas:', err)
     }
@@ -128,7 +128,7 @@ export function CanvasPage() {
   const handleGuestSignIn = useCallback(async () => {
     try {
       await linkWithPopup(user!, new GoogleAuthProvider())
-      await updateDoc(doc(db, 'canvases', canvasId!), { deleteAt: deleteField() })
+      await cancelCanvasDeletion(canvasId!)
     } catch (err) {
       const code = (err as { code?: string })?.code
       if (code === 'auth/credential-already-in-use') {

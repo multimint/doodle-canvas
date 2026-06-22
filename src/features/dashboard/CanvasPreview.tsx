@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { ref, get } from 'firebase/database'
-import { rtdb } from '../../lib/firebase'
 import { Icon } from '../../lib/icons'
 import type { Stroke } from '../../lib/types'
+import { getStrokesOnce } from '../../data/strokes'
 import { strokeKind } from '../canvas/tools/registry'
 import { documentKind } from '../canvas/documents/registry'
 
@@ -78,13 +77,8 @@ export function CanvasPreview({ canvasId, accentColor = '#3d5afe', kind }: Props
   useEffect(() => {
     if (!visible) return
     setLoaded(false)
-    get(ref(rtdb, `canvases/${canvasId}/strokes`))
-      .then((snap) => {
-        const result: Stroke[] = []
-        snap.forEach((child) => {
-          result.push({ id: child.key!, ...child.val() } as Stroke)
-        })
-        result.sort((a, b) => a.timestamp - b.timestamp)
+    getStrokesOnce(canvasId)
+      .then((result) => {
         setStrokes(result)
         setLoaded(true)
       })
