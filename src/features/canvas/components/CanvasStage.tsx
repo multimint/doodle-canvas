@@ -55,6 +55,8 @@ import { TextBoxEditor } from './TextBoxEditor'
 import { WiggleFilters } from './WiggleFilters'
 import type { ActiveBox, XformBox, ActiveSticker } from './textBoxTypes'
 import type { LiveStroke } from '../hooks/useLiveStrokes'
+import { MARKER_LAYER_OPACITY } from '../constants'
+import { RemoteSelectionOverlay } from './RemoteSelectionOverlay'
 
 interface Props {
   strokes: Stroke[]
@@ -115,17 +117,6 @@ interface Props {
 }
 
 const DPR = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
-// Highlighter translucency. Markers paint *opaquely* onto their own layer (so per-pixel the
-// latest/topmost stroke wins and same-color overlaps never darken), and the whole layer is
-// then shown at this alpha — one flat, uniform translucency regardless of how strokes nest.
-const MARKER_LAYER_OPACITY = 0.82
-
-function hexToRgba(hex: string, alpha: number): string {
-  const r = parseInt(hex.slice(1, 3), 16)
-  const g = parseInt(hex.slice(3, 5), 16)
-  const b = parseInt(hex.slice(5, 7), 16)
-  return `rgba(${r},${g},${b},${alpha})`
-}
 
 // The immediate-mode drawing surface. A stack of two transparent canvases (markers behind,
 // everything else in front — so eraser destination-out can't reach markers) plus DOM overlays.
@@ -255,6 +246,11 @@ export function CanvasStage({
         : undefined,
     boundedFrame:
       boundedView && worldWidth && worldHeight
+        ? { width: worldWidth, height: worldHeight }
+        : undefined,
+    // Free view: fit-and-centre the canvas's own extent (from its document kind).
+    frame:
+      !lockView && !boundedView && worldWidth && worldHeight
         ? { width: worldWidth, height: worldHeight }
         : undefined,
   })
@@ -1207,77 +1203,13 @@ export function CanvasStage({
       />
       <RemoteTextCaret focuses={remoteFocusList} strokes={strokes} cam={cam} />
 
-      {/* Marquee rubber-band. */}
-      {marquee &&
-        (() => {
-          const mx = Math.min(marquee.x0, marquee.x1)
-          const my = Math.min(marquee.y0, marquee.y1)
-          const mw = Math.abs(marquee.x1 - marquee.x0)
-          const mh = Math.abs(marquee.y1 - marquee.y0)
-          return (
-            <div
-              style={{
-                position: 'absolute',
-                left: mx * cam.zoom + cam.panX,
-                top: my * cam.zoom + cam.panY,
-                width: mw * cam.zoom,
-                height: mh * cam.zoom,
-                border: '1px solid #3d5afe',
-                background: 'rgba(61,90,254,0.12)',
-                pointerEvents: 'none',
-                zIndex: 4,
-              }}
-            />
-          )
-        })()}
-
-      {/* Friends' marquees + multi-select outlines. */}
-      {friendCursors &&
-        Object.entries(friendCursors).map(([fuid, c]) => {
-          const els: React.ReactNode[] = []
-          if (c.marquee) {
-            const { x0, y0, x1, y1 } = c.marquee
-            els.push(
-              <div
-                key={`fm-${fuid}`}
-                style={{
-                  position: 'absolute',
-                  left: Math.min(x0, x1) * cam.zoom + cam.panX,
-                  top: Math.min(y0, y1) * cam.zoom + cam.panY,
-                  width: Math.abs(x1 - x0) * cam.zoom,
-                  height: Math.abs(y1 - y0) * cam.zoom,
-                  border: `1.5px dashed ${c.color}`,
-                  background: hexToRgba(c.color, 0.1),
-                  pointerEvents: 'none',
-                  zIndex: 4,
-                }}
-              />,
-            )
-          }
-          if (c.selectedIds && c.selectedIds.length >= 2) {
-            c.selectedIds.forEach((id) => {
-              const s = strokes.find((k) => k.id === id)
-              if (!s) return
-              const a = textAABB(s.data)
-              els.push(
-                <div
-                  key={`fs-${fuid}-${id}`}
-                  style={{
-                    position: 'absolute',
-                    left: a.minX * cam.zoom + cam.panX,
-                    top: a.minY * cam.zoom + cam.panY,
-                    width: (a.maxX - a.minX) * cam.zoom,
-                    height: (a.maxY - a.minY) * cam.zoom,
-                    border: `1.5px dashed ${c.color}`,
-                    pointerEvents: 'none',
-                    zIndex: 4,
-                  }}
-                />,
-              )
-            })
-          }
-          return els
-        })}
+      {/* Local marquee rubber-band + friends' marquees and multi-select outlines. */}
+      <RemoteSelectionOverlay
+        marquee={marquee}
+        friendCursors={friendCursors}
+        strokes={strokes}
+        cam={cam}
+      />
 
       {/* Single-selection handles (text or sticker). Also shown while creating a brand-new box
           (active.id === null) under the text tool, so it can be sized/rotated before committing. */}

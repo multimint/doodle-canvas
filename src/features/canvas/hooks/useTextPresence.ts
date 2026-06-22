@@ -1,6 +1,6 @@
-import { useEffect, useRef, useCallback, useState, useMemo } from 'react'
-import { ref, onValue, set, remove, off, onDisconnect } from 'firebase/database'
-import { rtdb } from '../../../lib/firebase'
+import { useEffect, useRef, useCallback, useState } from 'react'
+import { subscribeChannel, publishOwn, clearOwn, clearOwnOnDisconnect } from '../../../data/collab'
+import { TextFocusSchema, parseOrNull } from '../../../lib/schemas'
 import type { TextFocus } from '../../../lib/types'
 
 // Live typing is streamed on every keystroke; coalesce writes to ~16/sec. Selection/mode
@@ -9,32 +9,22 @@ const THROTTLE_MS = 60
 
 export function useTextPresence(canvasId: string, uid: string, color: string) {
   const [remoteFocus, setRemoteFocus] = useState<Record<string, TextFocus>>({})
-  const myRef = useMemo(
-    () => ref(rtdb, `canvases/${canvasId}/textFocus/${uid}`),
-    [canvasId, uid],
-  )
-  const allRef = useMemo(
-    () => ref(rtdb, `canvases/${canvasId}/textFocus`),
-    [canvasId],
-  )
   const lastKeyRef = useRef('') // `${boxId}|${editing}` of the last write, to bypass throttle
   const lastEmitRef = useRef(0)
 
   useEffect(() => {
-    const handle = onValue(allRef, (snap) => {
-      const data: Record<string, TextFocus> = {}
-      snap.forEach((child) => {
-        if (child.key !== uid) data[child.key!] = child.val() as TextFocus
-      })
-      setRemoteFocus(data)
-    })
+    const unsubscribe = subscribeChannel<TextFocus>(
+      canvasId,
+      'textFocus',
+      (key, raw) => (key === uid ? null : parseOrNull(TextFocusSchema, raw, 'textFocus')),
+      setRemoteFocus,
+    )
     // Clear the focus if the tab closes mid-edit so a stale outline doesn't haunt the box.
-    onDisconnect(myRef).remove()
+    clearOwnOnDisconnect(canvasId, 'textFocus', uid)
     return () => {
-      off(allRef, 'value', handle)
-      remove(myRef)
+      unsubscribe()
+      clearOwn(canvasId, 'textFocus', uid)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canvasId, uid])
 
   // boxId null → not on any box: clear our focus. Otherwise publish {boxId, editing, text, caret}.
@@ -42,7 +32,7 @@ export function useTextPresence(canvasId: string, uid: string, color: string) {
     (boxId: string | null, editing: boolean, text?: string, caret?: number) => {
       if (!boxId) {
         lastKeyRef.current = ''
-        remove(myRef)
+        clearOwn(canvasId, 'textFocus', uid)
         return
       }
       const key = `${boxId}|${editing}`
@@ -54,9 +44,9 @@ export function useTextPresence(canvasId: string, uid: string, color: string) {
       const entry: TextFocus = { boxId, editing, color }
       if (text !== undefined) entry.text = text
       if (caret !== undefined) entry.caret = caret
-      set(myRef, entry)
+      publishOwn(canvasId, 'textFocus', uid, entry)
     },
-    [myRef, color],
+    [canvasId, uid, color],
   )
 
   return { remoteFocus, setTextFocus }

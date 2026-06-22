@@ -1,14 +1,16 @@
 import { useState } from 'react'
 import { CanvasCard } from '../CanvasCard'
 import { EmptyState, NoResultsState } from '../DashboardEmptyStates'
-import { type PageProps, docCols, filterByTitle, byRecent, NewTile } from './shared'
+import { docCols, filterByTitle, byRecent, NewTile } from './shared'
+import { useDashboard } from '../DashboardContext'
 
 type DocFilter = 'all' | 'mine' | 'shared'
 const FILTERS: [DocFilter, string][] = [['all', 'All'], ['mine', 'Mine'], ['shared', 'Shared']]
 
 // Documents: every canvas, narrowed by an All/Mine/Shared chip and the global search, with a
 // "New canvas" tile leading the grid.
-export function DocumentsPage({ uid, owned, shared, ownedSet, searchQuery, setSearchQuery, mobile, onCreate }: PageProps) {
+export function DocumentsPage() {
+  const { uid, owned, shared, ownedSet, searchQuery, setSearchQuery, mobile, onCreate } = useDashboard()
   const [filter, setFilter] = useState<DocFilter>('all')
 
   const hasAny = owned.length + shared.length > 0

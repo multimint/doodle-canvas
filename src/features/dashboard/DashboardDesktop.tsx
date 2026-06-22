@@ -4,8 +4,8 @@ import { HomePage } from './pages/HomePage'
 import { DocumentsPage } from './pages/DocumentsPage'
 import { SharedPage } from './pages/SharedPage'
 import { PlannerPage } from './pages/PlannerPage'
-import type { PageProps } from './pages/shared'
-import type { DashboardViewProps, NavKey } from './DashboardView'
+import { useDashboard } from './DashboardContext'
+import type { NavKey } from './DashboardView'
 
 const NAV_ITEMS: [NavKey, string, string][] = [
   ['home', 'home', 'Home'],
@@ -16,19 +16,15 @@ const NAV_ITEMS: [NavKey, string, string][] = [
 
 // The wide-viewport Dashboard: a sidebar (4-page nav + storage meter + user) beside the main
 // area (a top bar with search/create, hidden on the Planner page, and the active page).
-export function DashboardDesktop(props: DashboardViewProps) {
+export function DashboardDesktop() {
   const {
-    user, uid, userInitial, userColor, owned, shared, ownedSet, loading, creating,
+    user, userInitial, userColor, owned, shared, loading, creating,
     searchQuery, setSearchQuery, totalOwned, activeNav, setActiveNav, onSignOut, onCreate,
-  } = props
+  } = useDashboard()
 
   const counts: Partial<Record<NavKey, number>> = {
     documents: owned.length + shared.length,
     shared: shared.length,
-  }
-
-  const pageProps: PageProps = {
-    user, uid, owned, shared, ownedSet, searchQuery, setSearchQuery, mobile: false, onCreate,
   }
 
   return (
@@ -116,10 +112,10 @@ export function DashboardDesktop(props: DashboardViewProps) {
           <div className='spinner' />
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', padding: '24px 26px', flex: 1, overflowY: 'auto' }}>
-            {activeNav === 'home' && <HomePage {...pageProps} />}
-            {activeNav === 'documents' && <DocumentsPage {...pageProps} />}
-            {activeNav === 'shared' && <SharedPage {...pageProps} />}
-            {activeNav === 'planner' && <PlannerPage mobile={false} uid={pageProps.uid} owned={pageProps.owned} />}
+            {activeNav === 'home' && <HomePage />}
+            {activeNav === 'documents' && <DocumentsPage />}
+            {activeNav === 'shared' && <SharedPage />}
+            {activeNav === 'planner' && <PlannerPage />}
           </div>
         )}
       </div>

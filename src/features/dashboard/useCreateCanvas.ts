@@ -1,15 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  collection,
-  doc,
-  increment,
-  serverTimestamp,
-  writeBatch,
-} from 'firebase/firestore'
-import { ref, set } from 'firebase/database'
-import { db, rtdb } from '../../lib/firebase'
 import { documentKind, DEFAULT_DOCUMENT_KIND } from '../canvas/documents/registry'
+import { newCanvasId, createCanvas } from '../../data/canvases'
 import { addDayLink } from './planner/plannerLinks'
 
 interface CreateCanvasOptions {
@@ -21,7 +13,7 @@ interface CreateCanvasOptions {
   linkTo?: { uid: string; iso: string }
 }
 
-// Creates a new canvas (Firestore doc + RTDB access entries + owner canvasCount bump),
+// Creates a new canvas (delegating the Firestore/RTDB writes to the canvases repository),
 // holds the in-flight `creating`/`creatingId` state for the overlay, and navigates to
 // the new canvas. Limit enforcement stays in the caller so it can surface a modal.
 export function useCreateCanvas(uid: string) {
@@ -29,57 +21,35 @@ export function useCreateCanvas(uid: string) {
   const [creating, setCreating] = useState(false)
   const [creatingId, setCreatingId] = useState<string | null>(null)
 
-  const createCanvas = async ({ kindId = DEFAULT_DOCUMENT_KIND, title, linkTo }: CreateCanvasOptions = {}) => {
+  const createCanvasFlow = async ({ kindId = DEFAULT_DOCUMENT_KIND, title, linkTo }: CreateCanvasOptions = {}) => {
     setCreating(true)
     try {
       const kind = documentKind(kindId)
       const finalTitle = title?.trim() || kind.defaultTitle || 'Untitled Canvas'
-      const canvasRef = doc(collection(db, 'canvases'))
-      setCreatingId(canvasRef.id)
-      const batch = writeBatch(db)
-      batch.set(canvasRef, {
-        title: finalTitle,
-        ownerId: uid,
-        members: [],
-        pendingInvites: [],
-        kind: kind.id,
-        width: kind.width,
-        height: kind.height,
-        createdAt: serverTimestamp(),
-        updatedAt: Date.now(),
-      })
-      batch.update(doc(db, 'users', uid), { canvasCount: increment(1) })
+      const canvasId = newCanvasId()
+      setCreatingId(canvasId)
 
+      // Run the write alongside a minimum delay so the creating overlay doesn't flash.
       await Promise.all([
-        batch
-          .commit()
-          .then(() =>
-            Promise.all([
-              set(ref(rtdb, `canvases/${canvasRef.id}/access/ownerId`), uid),
-              set(
-                ref(rtdb, `canvases/${canvasRef.id}/access/members/${uid}`),
-                true,
-              ),
-            ]),
-          ),
+        createCanvas(canvasId, { uid, title: finalTitle, width: kind.width, height: kind.height, kindId: kind.id }),
         new Promise((resolve) => setTimeout(resolve, 900)),
       ])
 
       // Pin the new canvas to its Planner day, if requested, before navigating into it.
       if (linkTo) {
         await addDayLink(linkTo.uid, linkTo.iso, {
-          canvasId: canvasRef.id,
+          canvasId,
           title: finalTitle,
           kind: kind.id,
         }).catch((e) => console.error('Failed to link new canvas to day', e))
       }
 
-      navigate(`/canvas/${canvasRef.id}`)
+      navigate(`/canvas/${canvasId}`)
     } finally {
       setCreating(false)
       setCreatingId(null)
     }
   }
 
-  return { creating, creatingId, createCanvas }
+  return { creating, creatingId, createCanvas: createCanvasFlow }
 }

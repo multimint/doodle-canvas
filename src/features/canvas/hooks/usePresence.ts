@@ -1,6 +1,13 @@
 import { useEffect, useState } from 'react'
-import { ref, onValue, off, onDisconnect, set, serverTimestamp } from 'firebase/database'
-import { rtdb } from '../../../lib/firebase'
+import { z } from 'zod'
+import {
+  subscribeChannel,
+  publishOwn,
+  clearOwn,
+  clearOwnOnDisconnect,
+  channelServerTimestamp,
+} from '../../../data/collab'
+import { parseOrNull } from '../../../lib/schemas'
 import type { PresenceEntry } from '../../../lib/types'
 
 interface Options {
@@ -11,40 +18,50 @@ interface Options {
   color: string
 }
 
+// `joinedAt` is written as a serverTimestamp sentinel, so a freshly-published entry can be read back
+// before the server resolves it to a number. We keep such entries in the presence map (matching the
+// original behaviour — they still show the peer as present) and the leader calc filters them out.
+const PresenceReadSchema = z.object({
+  displayName: z.string(),
+  photoURL: z.string(),
+  color: z.string(),
+  joinedAt: z.number().nullable().optional(),
+})
+
 export function usePresence({ canvasId, uid, displayName, photoURL, color }: Options) {
   const [presence, setPresence] = useState<Record<string, PresenceEntry>>({})
   const [isLeader, setIsLeader] = useState(false)
 
   useEffect(() => {
-    const presenceRef = ref(rtdb, `canvases/${canvasId}/presence/${uid}`)
-    const allPresenceRef = ref(rtdb, `canvases/${canvasId}/presence`)
-
-    // serverTimestamp() is a write-time sentinel resolved by RTDB server;
-    // cast is safe because readers always see the resolved number via onValue.
-    const myEntry = { displayName, photoURL, color, joinedAt: serverTimestamp() } as unknown as PresenceEntry
-    set(presenceRef, myEntry)
-    onDisconnect(presenceRef).remove()
-
-    const handle = onValue(allPresenceRef, (snap) => {
-      const data: Record<string, PresenceEntry> = {}
-      snap.forEach((child) => {
-        data[child.key!] = child.val() as PresenceEntry
-      })
-      setPresence(data)
-
-      // Leader = earliest joinedAt; uid string comparison breaks ties.
-      // Filter out entries where joinedAt hasn't resolved yet (null/0).
-      const candidates = Object.entries(data)
-        .filter(([, e]) => !!e.joinedAt)
-        .sort(([aUid, a], [bUid, b]) =>
-          a.joinedAt !== b.joinedAt ? a.joinedAt - b.joinedAt : aUid < bUid ? -1 : 1
-        )
-      setIsLeader(candidates.length > 0 && candidates[0][0] === uid)
+    publishOwn(canvasId, 'presence', uid, {
+      displayName,
+      photoURL,
+      color,
+      joinedAt: channelServerTimestamp(),
     })
+    clearOwnOnDisconnect(canvasId, 'presence', uid)
+
+    const unsubscribe = subscribeChannel<PresenceEntry>(
+      canvasId,
+      'presence',
+      (_key, raw) => parseOrNull(PresenceReadSchema, raw, 'presence') as PresenceEntry | null,
+      (data) => {
+        setPresence(data)
+
+        // Leader = earliest joinedAt; uid string comparison breaks ties.
+        // Filter out entries where joinedAt hasn't resolved yet (null/0).
+        const candidates = Object.entries(data)
+          .filter(([, e]) => !!e.joinedAt)
+          .sort(([aUid, a], [bUid, b]) =>
+            a.joinedAt !== b.joinedAt ? a.joinedAt - b.joinedAt : aUid < bUid ? -1 : 1,
+          )
+        setIsLeader(candidates.length > 0 && candidates[0][0] === uid)
+      },
+    )
 
     return () => {
-      off(allPresenceRef, 'value', handle)
-      presenceRef.ref && set(presenceRef, null)
+      unsubscribe()
+      clearOwn(canvasId, 'presence', uid)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canvasId, uid])

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { signOut } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { auth, db } from '../../lib/firebase';
+import { auth } from '../../lib/firebase';
+import { reconcileCanvasCount } from '../../data/users';
 import { useAuth } from '../auth/useAuth';
 import { useCanvasList } from './useCanvasList';
 import { usePendingInvites } from '../sharing/usePendingInvites';
@@ -11,7 +11,8 @@ import { useIsMobile } from './useIsMobile';
 import { useCreateCanvas } from './useCreateCanvas';
 import { DashboardMobile } from './DashboardMobile';
 import { DashboardDesktop } from './DashboardDesktop';
-import type { DashboardViewProps, NavKey } from './DashboardView';
+import { DashboardProvider, type DashboardContextValue } from './DashboardContext';
+import type { NavKey } from './DashboardView';
 
 type ModalConfig = {
   title: string;
@@ -47,13 +48,7 @@ export function Dashboard() {
   // Sync canvasCount if it drifted from the real owned count (e.g. console deletes)
   useEffect(() => {
     if (loading) return
-    const userRef = doc(db, 'users', uid)
-    getDoc(userRef).then((snap) => {
-      const stored = snap.data()?.canvasCount ?? 0
-      if (stored !== totalOwned) {
-        setDoc(userRef, { canvasCount: totalOwned }, { merge: true }).catch(() => {})
-      }
-    }).catch(() => {})
+    reconcileCanvasCount(uid, totalOwned).catch(() => {})
   }, [loading, totalOwned, uid])
 
   const handleSignOut = () => {
@@ -94,7 +89,7 @@ export function Dashboard() {
     .toUpperCase();
   const userColor = MCOLORS[2];
 
-  const viewProps: DashboardViewProps = {
+  const ctxValue: DashboardContextValue = {
     user: user!,
     uid,
     userInitial,
@@ -111,15 +106,12 @@ export function Dashboard() {
     setActiveNav,
     onSignOut: handleSignOut,
     onCreate: handleCreate,
+    mobile: isMobile,
   };
 
   return (
-    <>
-      {isMobile ? (
-        <DashboardMobile {...viewProps} />
-      ) : (
-        <DashboardDesktop {...viewProps} />
-      )}
+    <DashboardProvider value={ctxValue}>
+      {isMobile ? <DashboardMobile /> : <DashboardDesktop />}
       {modal && (
         <ConfirmModal
           title={modal.title}
@@ -130,6 +122,6 @@ export function Dashboard() {
           onCancel={modal.showCancel ? () => setModal(null) : undefined}
         />
       )}
-    </>
+    </DashboardProvider>
   );
 }

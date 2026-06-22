@@ -1,4 +1,15 @@
-import { STROKE_SIZES, stepStrokeWidth } from './strokeSize'
+import { STROKE_SIZES, stepStrokeWidth, effectiveStrokeWidth, ERASER_SCALE } from './strokeSize'
+
+describe('effectiveStrokeWidth', () => {
+  it('enlarges the eraser footprint by ERASER_SCALE', () => {
+    expect(effectiveStrokeWidth('eraser', 6)).toBe(6 * ERASER_SCALE)
+  })
+
+  it('leaves every other tool 1:1', () => {
+    expect(effectiveStrokeWidth('pen', 6)).toBe(6)
+    expect(effectiveStrokeWidth('marker', 12)).toBe(12)
+  })
+})
 
 describe('stepStrokeWidth', () => {
   it('steps up and down through the listed sizes', () => {

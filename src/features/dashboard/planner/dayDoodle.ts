@@ -9,6 +9,7 @@ import {
   where,
 } from 'firebase/firestore'
 import { db } from '../../../lib/firebase'
+import { parseStrokeList } from '../../../lib/schemas'
 import type { Stroke } from '../../../lib/types'
 
 // A Day Doodle is a small, personal drawing pinned to one calendar date — distinct from a Canvas
@@ -35,11 +36,6 @@ export interface DayDoodleDoc {
   updatedAt?: unknown
 }
 
-// ISO yyyy-mm-dd in local time (matches PlannerPage's own isoDate). Used as the doc id.
-export function isoDate(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
 function doodlesCol(uid: string) {
   return collection(db, 'users', uid, 'dayDoodles')
 }
@@ -57,8 +53,7 @@ const byTimestamp = (a: Stroke, b: Stroke) => a.timestamp - b.timestamp
 export async function loadDoodle(uid: string, date: string): Promise<Stroke[]> {
   const snap = await getDoc(doc(doodlesCol(uid), date))
   if (!snap.exists()) return []
-  const data = snap.data() as DayDoodleDoc
-  return (data.strokes ?? []).slice().sort(byTimestamp)
+  return parseStrokeList(snap.data().strokes, `dayDoodle ${date}`).sort(byTimestamp)
 }
 
 // Overwrite a day's doodle with the given strokes (whole-doc write — see ADR 0003 trade-offs).
@@ -81,8 +76,7 @@ export async function loadDoodleRange(
   const snap = await getDocs(q)
   const map = new Map<string, Stroke[]>()
   snap.forEach((d) => {
-    const data = d.data() as DayDoodleDoc
-    map.set(d.id, (data.strokes ?? []).slice().sort(byTimestamp))
+    map.set(d.id, parseStrokeList(d.data().strokes, `dayDoodle ${d.id}`).sort(byTimestamp))
   })
   return map
 }

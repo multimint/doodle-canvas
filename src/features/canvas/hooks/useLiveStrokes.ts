@@ -1,6 +1,7 @@
-import { useEffect, useCallback, useState, useRef, useMemo } from 'react'
-import { ref, onValue, set, remove, off, onDisconnect } from 'firebase/database'
-import { rtdb } from '../../../lib/firebase'
+import { useEffect, useCallback, useState, useRef } from 'react'
+import { z } from 'zod'
+import { subscribeChannel, publishOwn, clearOwn, clearOwnOnDisconnect } from '../../../data/collab'
+import { parseOrNull } from '../../../lib/schemas'
 import type { Stroke } from '../../../lib/types'
 
 const THROTTLE_MS = 50
@@ -13,31 +14,31 @@ export interface LiveStroke {
   strokeWidth: number
 }
 
+const LiveStrokeSchema = z.object({
+  type: z.enum(['path', 'marker', 'rect', 'circle', 'line', 'text', 'sticker', 'eraser']),
+  points: z.array(z.number()),
+  color: z.string(),
+  strokeWidth: z.number(),
+})
+
 export function useLiveStrokes(canvasId: string, uid: string) {
   const [remoteStrokes, setRemoteStrokes] = useState<Record<string, LiveStroke>>({})
   const lastEmitRef = useRef(0)
 
-  const myLiveRef = useMemo(() => ref(rtdb, `canvases/${canvasId}/live/${uid}`), [canvasId, uid])
-  const allLiveRef = useMemo(() => ref(rtdb, `canvases/${canvasId}/live`), [canvasId])
-
   useEffect(() => {
     // Remove our live stroke on server if the client disconnects unexpectedly
-    onDisconnect(myLiveRef).remove()
+    clearOwnOnDisconnect(canvasId, 'live', uid)
 
-    const handle = onValue(allLiveRef, (snap) => {
-      const data: Record<string, LiveStroke> = {}
-      snap.forEach((child) => {
-        if (child.key !== uid && child.val()) {
-          data[child.key!] = child.val() as LiveStroke
-        }
-      })
-      setRemoteStrokes(data)
-    })
+    const unsubscribe = subscribeChannel<LiveStroke>(
+      canvasId,
+      'live',
+      (key, raw) => (key === uid ? null : parseOrNull(LiveStrokeSchema, raw, 'liveStroke')),
+      setRemoteStrokes,
+    )
     return () => {
-      off(allLiveRef, 'value', handle)
-      remove(myLiveRef)
+      unsubscribe()
+      clearOwn(canvasId, 'live', uid)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canvasId, uid])
 
   const emitLiveStroke = useCallback((stroke: LiveStroke) => {
@@ -48,12 +49,12 @@ export function useLiveStrokes(canvasId: string, uid: string) {
     const points = stroke.points.length > LIVE_POINTS_CAP * 2
       ? stroke.points.slice(-LIVE_POINTS_CAP * 2)
       : stroke.points
-    set(myLiveRef, { ...stroke, points })
-  }, [myLiveRef])
+    publishOwn(canvasId, 'live', uid, { ...stroke, points })
+  }, [canvasId, uid])
 
   const clearLiveStroke = useCallback(() => {
-    remove(myLiveRef)
-  }, [myLiveRef])
+    clearOwn(canvasId, 'live', uid)
+  }, [canvasId, uid])
 
   return { remoteStrokes, emitLiveStroke, clearLiveStroke }
 }

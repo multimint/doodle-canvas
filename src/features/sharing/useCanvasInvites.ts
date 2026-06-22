@@ -1,23 +1,27 @@
 import { useState, useEffect, useRef } from 'react'
-import {
-  doc, getDoc, runTransaction, collection, query, where, getDocs,
-  arrayUnion, updateDoc, arrayRemove,
-} from 'firebase/firestore'
-import { ref, set, remove } from 'firebase/database'
-import { db, rtdb } from '../../lib/firebase'
 import type { CanvasDoc } from '../../lib/types'
+import {
+  inviteByEmail,
+  removeMember as removeMemberFromCanvas,
+  cancelInvite as cancelInviteOnCanvas,
+  type InviteOutcome,
+} from '../../data/canvases'
+import { getUserProfile, type UserProfile } from '../../data/users'
 
-export interface MemberInfo {
-  displayName: string
-  email: string
-  photoURL: string
-}
+export type MemberInfo = UserProfile
 
 export type InviteStatus = 'idle' | 'sending' | 'done' | 'error'
 
-// Owns the data side of sharing a canvas: resolving member profiles, inviting by email
-// (existing user -> member, otherwise a pending invite), and removing members / cancelling
-// invites. Firestore is the source of truth; RTDB access entries are kept in sync.
+const INVITE_MESSAGES: Record<Extract<InviteOutcome, { ok: false }>['reason'], string> = {
+  cap: 'This canvas already has the maximum number of collaborators.',
+  'already-member': 'This user is already a collaborator.',
+  'already-pending': 'Invite already sent to this email.',
+  error: 'Failed to send invite. Please try again.',
+}
+
+// Owns the data side of sharing a canvas: resolving member profiles, inviting by email (existing
+// user -> member, otherwise a pending invite), and removing members / cancelling invites. All
+// Firebase access goes through the canvases/users repositories.
 export function useCanvasInvites(canvas: CanvasDoc) {
   const [email, setEmail] = useState('')
   const [status, setStatus] = useState<InviteStatus>('idle')
@@ -31,25 +35,10 @@ export function useCanvasInvites(canvas: CanvasDoc) {
     if (members.length === 0) { setMemberInfo({}); return }
     const gen = ++fetchGenRef.current
     const load = async () => {
-      const results: Record<string, MemberInfo> = {}
-      await Promise.all(members.map(async (uid) => {
-        try {
-          const snap = await getDoc(doc(db, 'users', uid))
-          if (snap.exists()) {
-            const d = snap.data()
-            results[uid] = {
-              displayName: d.displayName ?? uid,
-              email: d.email ?? '',
-              photoURL: d.photoURL ?? '',
-            }
-          } else {
-            results[uid] = { displayName: uid, email: '', photoURL: '' }
-          }
-        } catch {
-          results[uid] = { displayName: uid, email: '', photoURL: '' }
-        }
-      }))
-      if (gen === fetchGenRef.current) setMemberInfo(results)
+      const entries = await Promise.all(
+        members.map(async (uid) => [uid, await getUserProfile(uid)] as const),
+      )
+      if (gen === fetchGenRef.current) setMemberInfo(Object.fromEntries(entries))
     }
     load()
   }, [membersJson])
@@ -60,86 +49,33 @@ export function useCanvasInvites(canvas: CanvasDoc) {
     if (!trimmed) return
 
     setStatus('sending')
-    try {
-      const canvasRef = doc(db, 'canvases', canvas.id)
-
-      const usersSnap = await getDocs(query(
-        collection(db, 'users'),
-        where('email', '==', trimmed),
-      ))
-      const existingUser = usersSnap.empty ? null : usersSnap.docs[0]
-
-      let addedUid: string | null = null
-      let msg = ''
-
-      await runTransaction(db, async (tx) => {
-        const fresh = await tx.get(canvasRef)
-        if (!fresh.exists()) throw new Error('not-found')
-        const data = fresh.data()
-        const members: string[] = data.members ?? []
-        const pendingInvites: string[] = data.pendingInvites ?? []
-
-        if (members.length + pendingInvites.length >= 20) {
-          throw Object.assign(new Error('cap'), { code: 'cap' })
-        }
-
-        if (existingUser) {
-          const uid = existingUser.id
-          if (members.includes(uid)) {
-            throw Object.assign(new Error('already-member'), { code: 'already-member' })
-          }
-          tx.update(canvasRef, { members: arrayUnion(uid) })
-          addedUid = uid
-          msg = `${trimmed} added as collaborator.`
-        } else {
-          if (pendingInvites.includes(trimmed)) {
-            throw Object.assign(new Error('already-pending'), { code: 'already-pending' })
-          }
-          tx.update(canvasRef, { pendingInvites: arrayUnion(trimmed) })
-          msg = `Invite sent to ${trimmed}. They'll get access on first login.`
-        }
-      })
-
-      if (addedUid) {
-        await set(ref(rtdb, `canvases/${canvas.id}/access/members/${addedUid}`), true)
-      }
-
-      setMessage(msg)
+    const outcome = await inviteByEmail(canvas.id, trimmed)
+    if (outcome.ok) {
+      setMessage(
+        outcome.kind === 'member'
+          ? `${outcome.email} added as collaborator.`
+          : `Invite sent to ${outcome.email}. They'll get access on first login.`,
+      )
       setStatus('done')
       setEmail('')
-    } catch (err: unknown) {
-      const code = (err as { code?: string }).code
-      if (code === 'cap') {
-        setMessage('This canvas already has the maximum number of collaborators.')
-      } else if (code === 'already-member') {
-        setMessage('This user is already a collaborator.')
-      } else if (code === 'already-pending') {
-        setMessage('Invite already sent to this email.')
-      } else {
-        setMessage('Failed to send invite. Please try again.')
-      }
+    } else {
+      setMessage(INVITE_MESSAGES[outcome.reason])
       setStatus('error')
     }
   }
 
   const removeMember = async (uid: string) => {
     try {
-      await updateDoc(doc(db, 'canvases', canvas.id), { members: arrayRemove(uid) })
+      await removeMemberFromCanvas(canvas.id, uid)
     } catch {
       setMessage('Failed to remove member.')
       setStatus('error')
-      return
     }
-    // Firestore is source of truth — member is already kicked via onSnapshot.
-    // Best-effort RTDB cleanup; log if it fails so it can be investigated.
-    remove(ref(rtdb, `canvases/${canvas.id}/access/members/${uid}`)).catch(err => {
-      console.error('[InviteModal] RTDB member access cleanup failed for', uid, err)
-    })
   }
 
   const cancelInvite = async (inviteEmail: string) => {
     try {
-      await updateDoc(doc(db, 'canvases', canvas.id), { pendingInvites: arrayRemove(inviteEmail) })
+      await cancelInviteOnCanvas(canvas.id, inviteEmail)
     } catch {
       setMessage('Failed to cancel invite.')
       setStatus('error')

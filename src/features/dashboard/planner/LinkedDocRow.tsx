@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Icon } from '../../../lib/icons'
 import { ConfirmModal } from '../../../lib/ConfirmModal'
 import { documentKind } from '../../canvas/documents/registry'
-import { deleteCanvas } from '../deleteCanvas'
+import { deleteCanvas } from '../../../data/canvases'
 import { removeDayLink, type ResolvedLink } from './plannerLinks'
 
 interface Props {
