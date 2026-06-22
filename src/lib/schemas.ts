@@ -76,7 +76,9 @@ const canvasDocShape = z.object({
   kind: z.string().optional(),
   width: z.number(),
   height: z.number(),
-  createdAt: z.number(),
+  // `createdAt` is written with serverTimestamp(), so on read it's a Firestore Timestamp object,
+  // not a number — it's never read client-side, so it isn't modelled here and just passes through
+  // the loose schema. (Validating it as z.number() would drop every real canvas doc.)
   updatedAt: z.number(),
   snapshotStrokeIds: z.array(z.string()).optional(),
 })

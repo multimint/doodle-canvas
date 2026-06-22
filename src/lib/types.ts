@@ -11,7 +11,9 @@ export interface CanvasDoc {
   kind?: string // document-kind id (see features/canvas/documents); absent on pre-seam docs
   width: number
   height: number
-  createdAt: number
+  // Written with serverTimestamp(), so it reads back as a Firestore Timestamp, not a number. Not
+  // used client-side; optional/loose so boundary validation doesn't reject real docs.
+  createdAt?: number
   updatedAt: number
   snapshotStrokeIds?: string[]
   snapshotAt?: { toMillis(): number } | null

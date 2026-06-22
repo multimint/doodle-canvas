@@ -64,6 +64,12 @@ describe('CanvasDocSchema', () => {
     expect((parsed as Record<string, unknown>).snapshotAt).toBeDefined()
   })
 
+  it('accepts a Firestore Timestamp createdAt (serverTimestamp resolves to a Timestamp, not a number)', () => {
+    // Regression: validating createdAt as a number dropped every real canvas doc.
+    const withTimestamp = { ...doc, createdAt: { seconds: 1, nanoseconds: 0, toMillis: () => 1000 } }
+    expect(CanvasDocSchema.safeParse(withTimestamp).success).toBe(true)
+  })
+
   it('rejects a doc missing required fields', () => {
     const { ownerId: _omit, ...missing } = doc
     expect(CanvasDocSchema.safeParse(missing).success).toBe(false)
