@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
-import { ref, get, set } from 'firebase/database'
 import { linkWithPopup, signInWithPopup, GoogleAuthProvider } from 'firebase/auth'
-import { auth, rtdb } from '../../lib/firebase'
+import { auth } from '../../lib/firebase'
 import { subscribeCanvas, setCanvasTitle, cancelCanvasDeletion } from '../../data/canvases'
+import { grantMemberAccess, ensureOwnerAccess } from '../../data/access'
 import { useAuth } from '../auth/useAuth'
 import { useStrokes } from './hooks/useStrokes'
 import { useCursors } from './hooks/useCursors'
@@ -92,13 +92,12 @@ export function CanvasPage() {
 
   useEffect(() => {
     if (!canvasId) return
-    set(ref(rtdb, `canvases/${canvasId}/access/members/${uid}`), true).catch(console.error)
+    grantMemberAccess(canvasId, uid).catch(console.error)
   }, [canvasId, uid])
 
   useEffect(() => {
     if (!canvasId || !canvasDoc || canvasDoc.ownerId !== uid) return
-    const ownerRef = ref(rtdb, `canvases/${canvasId}/access/ownerId`)
-    get(ownerRef).then(snap => { if (!snap.exists()) return set(ownerRef, uid) }).catch(console.error)
+    ensureOwnerAccess(canvasId, uid).catch(console.error)
   }, [canvasId, canvasDoc?.ownerId, uid])
 
   const { strokes, atCap, addStroke, updateStroke, deleteStroke, clearAllStrokes } = useStrokes(canvasId!)

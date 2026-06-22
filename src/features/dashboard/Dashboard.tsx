@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { signOut } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { auth, db } from '../../lib/firebase';
+import { auth } from '../../lib/firebase';
+import { reconcileCanvasCount } from '../../data/users';
 import { useAuth } from '../auth/useAuth';
 import { useCanvasList } from './useCanvasList';
 import { usePendingInvites } from '../sharing/usePendingInvites';
@@ -47,13 +47,7 @@ export function Dashboard() {
   // Sync canvasCount if it drifted from the real owned count (e.g. console deletes)
   useEffect(() => {
     if (loading) return
-    const userRef = doc(db, 'users', uid)
-    getDoc(userRef).then((snap) => {
-      const stored = snap.data()?.canvasCount ?? 0
-      if (stored !== totalOwned) {
-        setDoc(userRef, { canvasCount: totalOwned }, { merge: true }).catch(() => {})
-      }
-    }).catch(() => {})
+    reconcileCanvasCount(uid, totalOwned).catch(() => {})
   }, [loading, totalOwned, uid])
 
   const handleSignOut = () => {

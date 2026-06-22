@@ -1,8 +1,8 @@
 import { createContext, useEffect, useState, type ReactNode } from 'react'
 import type { User } from 'firebase/auth'
 import { onAuthStateChanged } from 'firebase/auth'
-import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore'
-import { auth, db } from '../../lib/firebase'
+import { auth } from '../../lib/firebase'
+import { ensureUserDoc } from '../../data/users'
 
 interface AuthCtx {
   user: User | null
@@ -18,7 +18,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     return onAuthStateChanged(auth, async (firebaseUser) => {
       try {
-        if (firebaseUser) await ensureUserDoc(firebaseUser)
+        if (firebaseUser) {
+          await ensureUserDoc({
+            uid: firebaseUser.uid,
+            email: firebaseUser.email ?? '',
+            displayName: firebaseUser.displayName ?? '',
+            photoURL: firebaseUser.photoURL ?? '',
+          })
+        }
       } catch {
         // auth succeeded; Firestore doc sync is non-fatal
       } finally {
@@ -29,24 +36,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   return <AuthContext.Provider value={{ user, loading }}>{children}</AuthContext.Provider>
-}
-
-async function ensureUserDoc(user: User) {
-  const ref = doc(db, 'users', user.uid)
-  const snap = await getDoc(ref)
-  if (!snap.exists()) {
-    await setDoc(ref, {
-      email: user.email ?? '',
-      displayName: user.displayName ?? '',
-      photoURL: user.photoURL ?? '',
-      canvasCount: 0,
-      createdAt: serverTimestamp(),
-    })
-  } else {
-    await setDoc(ref, {
-      email: user.email ?? '',
-      displayName: user.displayName ?? '',
-      photoURL: user.photoURL ?? '',
-    }, { merge: true })
-  }
 }

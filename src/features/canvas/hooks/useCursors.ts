@@ -1,6 +1,6 @@
-import { useEffect, useRef, useCallback, useState, useMemo } from 'react'
-import { ref, onValue, set, remove, off } from 'firebase/database'
-import { rtdb } from '../../../lib/firebase'
+import { useEffect, useRef, useCallback, useState } from 'react'
+import { subscribeChannel, publishOwn, clearOwn } from '../../../data/collab'
+import { CursorPosSchema, parseOrNull } from '../../../lib/schemas'
 import type { CursorPos, ToolType } from '../../../lib/types'
 
 const THROTTLE_MS = 50
@@ -17,24 +17,18 @@ export function useCursors(
   const posRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
   const marqueeRef = useRef<{ x0: number; y0: number; x1: number; y1: number } | null>(null)
   const selectedIdsRef = useRef<string[] | null>(null)
-  const cursorRef = useMemo(() => ref(rtdb, `canvases/${canvasId}/cursors/${uid}`), [canvasId, uid])
-  const cursorsRef = useMemo(() => ref(rtdb, `canvases/${canvasId}/cursors`), [canvasId])
 
   useEffect(() => {
-    const handle = onValue(cursorsRef, (snap) => {
-      const data: Record<string, CursorPos> = {}
-      snap.forEach((child) => {
-        if (child.key !== uid) {
-          data[child.key!] = child.val() as CursorPos
-        }
-      })
-      setCursors(data)
-    })
+    const unsubscribe = subscribeChannel<CursorPos>(
+      canvasId,
+      'cursors',
+      (key, raw) => (key === uid ? null : parseOrNull(CursorPosSchema, raw, 'cursor')),
+      setCursors,
+    )
     return () => {
-      off(cursorsRef, 'value', handle)
-      remove(cursorRef)
+      unsubscribe()
+      clearOwn(canvasId, 'cursors', uid)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canvasId, uid])
 
   const buildPayload = (x: number, y: number): CursorPos => ({
@@ -48,9 +42,9 @@ export function useCursors(
     const now = Date.now()
     if (now - lastEmitRef.current < THROTTLE_MS) return
     lastEmitRef.current = now
-    set(cursorRef, buildPayload(x, y))
+    publishOwn(canvasId, 'cursors', uid, buildPayload(x, y))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cursorRef, color, tool, strokeWidth])
+  }, [canvasId, uid, color, tool, strokeWidth])
 
   const updateSelection = useCallback((sel: {
     marquee?: { x0: number; y0: number; x1: number; y1: number } | null
@@ -58,15 +52,15 @@ export function useCursors(
   }) => {
     if ('marquee' in sel) marqueeRef.current = sel.marquee ?? null
     if ('selectedIds' in sel) selectedIdsRef.current = sel.selectedIds ?? null
-    set(cursorRef, buildPayload(posRef.current.x, posRef.current.y))
+    publishOwn(canvasId, 'cursors', uid, buildPayload(posRef.current.x, posRef.current.y))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cursorRef, color, tool, strokeWidth])
+  }, [canvasId, uid, color, tool, strokeWidth])
 
   const clearCursor = useCallback(() => {
     marqueeRef.current = null
     selectedIdsRef.current = null
-    remove(cursorRef)
-  }, [cursorRef])
+    clearOwn(canvasId, 'cursors', uid)
+  }, [canvasId, uid])
 
   return { cursors, emitCursor, updateSelection, clearCursor }
 }

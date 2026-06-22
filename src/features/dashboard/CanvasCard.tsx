@@ -1,13 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { doc, updateDoc, arrayRemove } from 'firebase/firestore'
-import { ref as rtdbRef, remove } from 'firebase/database'
-import { db, rtdb } from '../../lib/firebase'
 import type { CanvasDoc } from '../../lib/types'
 import { Icon, MCOLORS } from '../../lib/icons'
 import { ConfirmModal } from '../../lib/ConfirmModal'
 import { CanvasPreview } from './CanvasPreview'
-import { deleteCanvas } from './deleteCanvas'
+import { deleteCanvas, removeMember } from '../../data/canvases'
 
 const isPlanner = (c: CanvasDoc) => c.kind === 'daily-planner'
 
@@ -82,10 +79,7 @@ export function CanvasCard({ canvas, isOwner, uid }: Props) {
       onConfirm: async () => {
         setModal(null)
         try {
-          await updateDoc(doc(db, 'canvases', canvas.id), { members: arrayRemove(uid) })
-          remove(rtdbRef(rtdb, `canvases/${canvas.id}/access/members/${uid}`)).catch(err =>
-            console.error('[CanvasCard] RTDB access cleanup failed', err)
-          )
+          await removeMember(canvas.id, uid)
         } catch (err) {
           console.error('Failed to leave canvas:', err)
           setModal({

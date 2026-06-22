@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { signInWithPopup, signInAnonymously, GoogleAuthProvider } from 'firebase/auth'
-import {
-  doc, collection, writeBatch, setDoc, serverTimestamp, increment, Timestamp,
-} from 'firebase/firestore'
-import { ref, set } from 'firebase/database'
-import { auth, db, rtdb } from '../../lib/firebase'
+import { auth } from '../../lib/firebase'
+import { ensureUserDoc } from '../../data/users'
+import { newCanvasId, createCanvas } from '../../data/canvases'
 import { Icon } from '../../lib/icons'
 import { Stage } from './signInDecor'
 import { Brand, LivePill, SignInPanel } from './SignInPanel'
+
+const GUEST_CANVAS_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
 export function GoogleSignIn() {
   const navigate = useNavigate()
@@ -40,32 +40,18 @@ export function GoogleSignIn() {
       const credential = await signInAnonymously(auth)
       const uid = credential.user.uid
 
-      await setDoc(doc(db, 'users', uid), {
-        email: '', displayName: '', photoURL: '', canvasCount: 0, createdAt: serverTimestamp(),
-      }, { merge: true })
+      await ensureUserDoc({ uid, email: '', displayName: '', photoURL: '' })
 
-      const canvasRef = doc(collection(db, 'canvases'))
-      const batch = writeBatch(db)
-      batch.set(canvasRef, {
+      const canvasId = newCanvasId()
+      await createCanvas(canvasId, {
+        uid,
         title: 'Untitled Canvas',
-        ownerId: uid,
-        members: [],
-        pendingInvites: [],
         width: 1920,
         height: 1080,
-        createdAt: serverTimestamp(),
-        updatedAt: Date.now(),
-        deleteAt: Timestamp.fromMillis(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        deleteAfterMs: GUEST_CANVAS_TTL_MS,
       })
-      batch.update(doc(db, 'users', uid), { canvasCount: increment(1) })
-      await batch.commit()
 
-      await Promise.all([
-        set(ref(rtdb, `canvases/${canvasRef.id}/access/ownerId`), uid),
-        set(ref(rtdb, `canvases/${canvasRef.id}/access/members/${uid}`), true),
-      ])
-
-      navigate(`/canvas/${canvasRef.id}`)
+      navigate(`/canvas/${canvasId}`)
     } catch (err) {
       const code = (err as { code?: string })?.code ?? 'unknown'
       console.error('[auth] guest start failed:', code, err)
